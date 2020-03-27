@@ -1,3 +1,5 @@
+{-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE DataKinds #-}
@@ -16,68 +18,85 @@ import Data.String
 import qualified Data.Map.Strict as M
 
 import qualified Text.Editor.Editable as Editable
+import Data.Text (Text)
+import Data.ByteString (ByteString)
 
+-- A type tag.
 data Reference str
-
---data instance InternalStorage (Reference str) = 
---  Storage where
---      MkStorage :: Editable str => Map Row (Map Col (Rune str))
 
 type instance InternalStorage (Reference str) = Storage str
 
 data Storage str where
-  MkStorage :: Editable str 
-            => str
-            -> Storage str
-
-modifyStorage :: Editable str => (str -> str) -> Storage str -> Storage str
-modifyStorage f (MkStorage s) = MkStorage $ f s
+  MkStorage :: Editable str => str -> Storage str
 
 type ReferenceEditor str m = TextEditor (Reference str) str m
 
-pureEditor :: Editable str => ReferenceEditor str Identity
-pureEditor = TextEditor
-    { _storage     = MkStorage mempty
-    , _insert      = \pos c   -> pure (insertImpl pureEditor pos c)
-    , _insertLine  = \pos str -> pure (insertLineImpl pureEditor pos str)
-    , _delete      = \pos     -> pure (deleteImpl     pureEditor pos)
+-- | A purely-functional editor that uses open recursion to propagate the
+-- changes to the internal storage.
+-- Approach taken from [this blog post](https://www.well-typed.com/blog/2018/03/oop-in-haskell/)
+pureEditor :: Editable str 
+           => (Storage str -> ReferenceEditor str Identity)
+           -> Storage str
+           -> ReferenceEditor str Identity
+pureEditor self storage = TextEditor
+    { _storage     = storage
+    , _insert      = \pos c   -> pure $ self (insertImpl storage pos c)
+    , _insertLine  = \pos str -> pure $ self (insertLineImpl storage pos str)
+    , _delete      = \pos     -> pure $ self (deleteImpl storage pos)
     , _deleteRange = \(Range s e) ->
-        pure $ foldr (\_ acc -> deleteImpl acc s) pureEditor [s..e]
-    , _itemAt     = undefined
+        pure $ self (foldr (\_ acc -> deleteImpl acc s) storage [s..e])
+    , _itemAt     = \(Pos ix) -> pure $
+        case storage of
+          MkStorage s -> case Editable.splitAt ix s of
+                           (_, "") -> Nothing 
+                           (_, xs) -> Just (Editable.head xs)
     , _itemsAt    = undefined
     }
 
-insertImpl :: forall str. Editable str 
-           => ReferenceEditor str Identity
+insertImpl :: Storage  str
            -> Pos 'Logical
            -> Rune str 
-           -> ReferenceEditor str Identity
-insertImpl old (Pos ix) rune =
-    old { _storage = insertChar (_storage old) }
-  where
-    insertChar (MkStorage s) = 
-      MkStorage $ case Editable.splitAt ix s of
-                    (before, rest) -> before <> singleton rune <> rest
+           -> Storage str
+insertImpl (MkStorage s) (Pos ix) rune = MkStorage $
+  case Editable.splitAt ix s of
+    (before, rest) -> before <> singleton rune <> rest
 
-insertLineImpl :: ReferenceEditor str Identity
+insertLineImpl :: Storage str
                -> Pos 'Logical
                -> str 
-               -> ReferenceEditor str Identity
-insertLineImpl old (Pos ix) line =
-    old { _storage = insertStr (_storage old)
-        }
-  where
-    insertStr (MkStorage s) = 
-      MkStorage $ case Editable.splitAt ix s of
-                    (before, rest) -> before <> line <> rest
+               -> Storage str
+insertLineImpl (MkStorage s) (Pos ix) line =
+  MkStorage $ case Editable.splitAt ix s of
+                (before, rest) -> before <> line <> rest
 
-deleteImpl :: ReferenceEditor str Identity
+deleteImpl :: Storage str
            -> Pos 'Logical
-           -> ReferenceEditor str Identity
-deleteImpl old (Pos ix) =
-    old { _storage = deleteStr (_storage old) }
-  where
-    deleteStr (MkStorage s) = 
-      MkStorage $ case Editable.splitAt ix s of
-                    (before, "") -> before
-                    (before, xs) -> before <> Editable.tail xs
+           -> Storage str
+deleteImpl (MkStorage s) (Pos ix) =
+  MkStorage $ case Editable.splitAt ix s of
+                (before, "") -> before
+                (before, xs) -> before <> Editable.tail xs
+
+{-----------------------------------------------------------------------------
+  Utility functions
+------------------------------------------------------------------------------}
+
+-- | Retrieves the /entire/ content of the internal storage.
+debugDumpStorage :: ReferenceEditor str Identity -> str
+debugDumpStorage ts = case _storage ts of (MkStorage s) -> s
+
+emptyStorage :: Editable str => Storage str
+emptyStorage = MkStorage mempty
+
+{-----------------------------------------------------------------------------
+  Concrete Implementations
+------------------------------------------------------------------------------}
+
+pureTxtEditor :: ReferenceEditor Text Identity
+pureTxtEditor = fix pureEditor emptyStorage
+
+pureBinaryEditor :: ReferenceEditor ByteString Identity
+pureBinaryEditor = fix pureEditor emptyStorage
+
+pureStrEditor :: ReferenceEditor String Identity
+pureStrEditor = fix pureEditor emptyStorage

@@ -17,7 +17,8 @@ class (IsString str, Eq str, Monoid str) => Editable str where
   head    :: str -> Rune str
   tail    :: str -> str
   splitAt :: Int -> str -> (str, str)
-  zip :: str -> str -> [(Rune str, Rune str)]
+  zip     :: str -> str -> [(Rune str, Rune str)]
+  find    :: (Rune str -> Bool) -> str -> Maybe (Rune str)
 
 instance Editable String where
   type instance Rune String = Char
@@ -27,6 +28,7 @@ instance Editable String where
   tail = L.tail
   zip = L.zip
   splitAt = L.splitAt
+  find = L.find
 
 instance Editable T.Text where
   type instance Rune T.Text = Char
@@ -36,6 +38,7 @@ instance Editable T.Text where
   tail = T.tail
   zip = T.zip
   splitAt = T.splitAt
+  find = T.find
 
 instance Editable B.ByteString where
   type instance Rune B.ByteString = Word8
@@ -45,3 +48,4 @@ instance Editable B.ByteString where
   tail = B.tail
   zip = B.zip
   splitAt = B.splitAt
+  find = B.find
