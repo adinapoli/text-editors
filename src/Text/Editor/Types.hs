@@ -1,3 +1,4 @@
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeFamilies #-}
@@ -12,11 +13,10 @@ import Data.Text (Text)
 
 import Text.Editor.Editable
 
-newtype Row = Row { getRow :: Int }
-newtype Col = Col { getCol :: Int }
+data PosType = Logical | Physical
 
 -- | A position identified by the X and Y coords.
-data Pos = Pos { row :: !Row, col :: !Col }
+newtype Pos (ty :: PosType) = Pos Int
 
 type family InternalStorage (backend :: *) :: *
 
@@ -31,42 +31,43 @@ data TextEditorAPI backend str (m :: * -> *) = TextEditorAPI
 -- of functions.
 data TextEditor backend str (m :: * -> *)
   = TextEditor
-      { _storage   :: InternalStorage backend
-      , _insert     :: Pos -> Rune str -> TextEditor backend str m
-      , _insertLine :: Row -> str -> TextEditor backend str m
-      , _delete     :: Pos -> TextEditor backend str m
-      , _deleteLine :: Row -> TextEditor backend str m
+      { _storage    :: InternalStorage backend
+      , _insert     :: Pos 'Logical -> Rune str -> TextEditor backend str m
+      , _insertLine :: Pos 'Logical -> str -> TextEditor backend str m
+      , _delete     :: Pos 'Logical -> TextEditor backend str m
+      , _deleteLine :: Pos 'Logical -> TextEditor backend str m
+      , _itemAt     :: Pos 'Logical -> m (Maybe (Rune str))
+      , _itemsAt    :: Pos 'Logical -> m str
       }
 
-insert :: Pos 
+insert :: Pos 'Logical
        -> Rune str
        -> TextEditor backend str m 
        -> TextEditor backend str m
 insert pos rune old = _insert old pos rune
 
-insertLine :: Row
+insertLine :: Pos 'Logical
            -> str
            -> TextEditor backend str m 
            -> TextEditor backend str m
-insertLine row str old = _insertLine old row str
+insertLine pos str old = _insertLine old pos str
 
-delete :: Pos
+delete :: Pos 'Logical
        -> TextEditor backend str m 
        -> TextEditor backend str m
 delete pos old = _delete old pos
 
-deleteLine :: Row
+deleteLine :: Pos 'Logical
            -> TextEditor backend str m 
            -> TextEditor backend str m
-deleteLine row old = _deleteLine old row
+deleteLine pos old = _deleteLine old pos
 
 exampleUserSession :: Monad m 
                    => TextEditorAPI backend String m 
                    -> m ()
 exampleUserSession api = do
   edtr <- load api "text.txt"
-  save api "text.txt" $ edtr & insertLine (Row 0) "foo"
-                             . insertLine (Row 0) "bar"
-                             . insert     (Pos (Row 1) (Col 5)) 'a'
-                             . deleteLine (Row 0)
-
+  save api "text.txt" $ edtr & insertLine (Pos 0) "foo"
+                             . insertLine (Pos 0) "bar"
+                             . insert     (Pos 2) 'a'
+                             . deleteLine (Pos 1)
