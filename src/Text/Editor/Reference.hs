@@ -1,3 +1,6 @@
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE EmptyDataDecls #-}
 {-# LANGUAGE TypeFamilies #-}
@@ -12,6 +15,8 @@ import Data.Map.Strict (Map)
 import Data.String
 import qualified Data.Map.Strict as M
 
+import qualified Text.Editor.Editable as Editable
+
 data Reference str
 
 --data instance InternalStorage (Reference str) = 
@@ -22,58 +27,57 @@ type instance InternalStorage (Reference str) = Storage str
 
 data Storage str where
   MkStorage :: Editable str 
-            => Map Row (Map Col (Rune str))
+            => str
             -> Storage str
 
-modifyStorage :: (Map Row (Map Col (Rune str)) -> (Map Row (Map Col (Rune str))))
-              -> Storage str 
-              -> Storage str
+modifyStorage :: Editable str => (str -> str) -> Storage str -> Storage str
 modifyStorage f (MkStorage s) = MkStorage $ f s
-
-referenceStorage :: InternalStorage (Reference str)
-referenceStorage = MkStorage mempty
 
 type ReferenceEditor str m = TextEditor (Reference str) str m
 
-pureEditor :: ReferenceEditor str Identity
+pureEditor :: Editable str => ReferenceEditor str Identity
 pureEditor = TextEditor
-    { _storage   = referenceStorage
-    , _insert     = insertImpl     pureEditor 
-    , _insertLine = insertLineImpl pureEditor
-    , _delete     = deleteImpl     pureEditor
-    , _deleteLine = deleteLineImpl pureEditor
+    { _storage     = MkStorage mempty
+    , _insert      = \pos c   -> pure (insertImpl pureEditor pos c)
+    , _insertLine  = \pos str -> pure (insertLineImpl pureEditor pos str)
+    , _delete      = \pos     -> pure (deleteImpl     pureEditor pos)
+    , _deleteRange = \(Range s e) ->
+        pure $ foldr (\_ acc -> deleteImpl acc s) pureEditor [s..e]
+    , _itemAt     = undefined
+    , _itemsAt    = undefined
     }
 
-insertImpl :: ReferenceEditor str Identity
-           -> Pos 
+insertImpl :: forall str. Editable str 
+           => ReferenceEditor str Identity
+           -> Pos 'Logical
            -> Rune str 
            -> ReferenceEditor str Identity
-insertImpl old pos rune =
+insertImpl old (Pos ix) rune =
     old { _storage = insertChar (_storage old) }
   where
-    insertChar = mempty
+    insertChar (MkStorage s) = 
+      MkStorage $ case Editable.splitAt ix s of
+                    (before, rest) -> before <> singleton rune <> rest
 
 insertLineImpl :: ReferenceEditor str Identity
-               -> Row
+               -> Pos 'Logical
                -> str 
                -> ReferenceEditor str Identity
-insertLineImpl old row line =
-    old { _storage = modifyStorage (M.alter insertStr row) (_storage old)
+insertLineImpl old (Pos ix) line =
+    old { _storage = insertStr (_storage old)
         }
   where
-    insertStr Nothing = Just $ M.fromList $ E.zip (fromString $ map Col [0..]) str
+    insertStr (MkStorage s) = 
+      MkStorage $ case Editable.splitAt ix s of
+                    (before, rest) -> before <> line <> rest
 
 deleteImpl :: ReferenceEditor str Identity
-           -> Pos
+           -> Pos 'Logical
            -> ReferenceEditor str Identity
-deleteImpl old (Pos row col) =
-    old { _storage = modifyStorage (M.alter deleteStr row) (_storage old) }
+deleteImpl old (Pos ix) =
+    old { _storage = deleteStr (_storage old) }
   where
-    deleteStr Nothing  = Nothing
-    deleteStr (Just m) = Just (M.delete col m)
-
-deleteLineImpl :: ReferenceEditor str Identity
-               -> Row
-               -> ReferenceEditor str Identity
-deleteLineImpl old row =
-    old { _storage = modifyStorage (M.delete row) (_storage old) }
+    deleteStr (MkStorage s) = 
+      MkStorage $ case Editable.splitAt ix s of
+                    (before, "") -> before
+                    (before, xs) -> before <> Editable.tail xs
