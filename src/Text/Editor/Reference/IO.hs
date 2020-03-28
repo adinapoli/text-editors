@@ -1,12 +1,15 @@
-{-# LANGUAGE NamedFieldPuns #-}
-{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE EmptyDataDecls #-}
 {-# LANGUAGE TypeFamilies #-}
-module Text.Editor.Reference where
+module Text.Editor.Reference.IO (
+      Reference
+    , ioEditorAPI
+
+    -- * Debug utility functions
+    , debugDumpStorage
+    ) where
 
 import Text.Editor.Types
 import Text.Editor.Editable as E
@@ -17,42 +20,33 @@ import Data.Map.Strict (Map)
 import Data.String
 import qualified Data.Map.Strict as M
 
-import qualified Text.Editor.Editable as Editable
+import qualified Data.Text as T
 import Data.Text (Text)
-import Data.ByteString (ByteString)
+
+import Data.Vector.Storable.MMap
+import qualified Data.Vector.Storable as V
+import Data.Vector.Storable (Vector)
 
 -- A type tag.
-data Reference str
+data Reference
 
-type instance InternalStorage (Reference str) = Storage str
-
-data Storage str where
-  MkStorage :: Editable str => str -> Storage str
-
-type ReferenceEditor str m = TextEditor (Reference str) str m
+type instance InternalStorage Reference = Vector Char
 
 -- | A purely-functional editor that uses open recursion to propagate the
 -- changes to the internal storage.
 -- Approach taken from [this blog post](https://www.well-typed.com/blog/2018/03/oop-in-haskell/)
-pureEditor :: Editable str 
-           => (Storage str -> ReferenceEditor str Identity)
-           -> Storage str
-           -> ReferenceEditor str Identity
-pureEditor self storage = TextEditor
-    { _storage     = storage
-    , _insert      = \pos c   -> pure $ self (insertImpl storage pos c)
-    , _insertLine  = \pos str -> pure $ self (insertLineImpl storage pos str)
-    , _delete      = \pos     -> pure $ self (deleteImpl storage pos)
-    , _deleteRange = \(Range s e) ->
-        pure $ self (foldr (\_ acc -> deleteImpl acc s) storage [s..e])
-    , _itemAt     = \(Pos ix) -> pure $
-        case storage of
-          MkStorage s -> case Editable.splitAt ix s of
-                           (_, "") -> Nothing 
-                           (_, xs) -> Just (Editable.head xs)
-    , _itemsAt    = undefined
+mkIoEditor :: InternalStorage Reference -> TextEditor Reference Text IO
+mkIoEditor initialStorage = TextEditor
+    { _storage     = initialStorage
+    , _insert      = undefined
+    , _insertLine  = undefined
+    , _delete      = undefined
+    , _deleteRange = undefined
+    , _itemAt      = undefined
+    , _itemsAt     = undefined
     }
 
+{-
 insertImpl :: Storage  str
            -> Pos 'Logical
            -> Rune str 
@@ -76,27 +70,24 @@ deleteImpl (MkStorage s) (Pos ix) =
   MkStorage $ case Editable.splitAt ix s of
                 (before, "") -> before
                 (before, xs) -> before <> Editable.tail xs
+-}
 
 {-----------------------------------------------------------------------------
   Utility functions
 ------------------------------------------------------------------------------}
 
 -- | Retrieves the /entire/ content of the internal storage.
-debugDumpStorage :: ReferenceEditor str Identity -> str
-debugDumpStorage ts = case _storage ts of (MkStorage s) -> s
-
-emptyStorage :: Editable str => Storage str
-emptyStorage = MkStorage mempty
+debugDumpStorage :: TextEditor Reference Text IO -> Text
+debugDumpStorage e = T.pack $ V.toList (_storage e)
 
 {-----------------------------------------------------------------------------
   Concrete Implementations
 ------------------------------------------------------------------------------}
 
-pureTxtEditor :: ReferenceEditor Text Identity
-pureTxtEditor = fix pureEditor emptyStorage
-
-pureBinaryEditor :: ReferenceEditor ByteString Identity
-pureBinaryEditor = fix pureEditor emptyStorage
-
-pureStrEditor :: ReferenceEditor String Identity
-pureStrEditor = fix pureEditor emptyStorage
+------------------------------------------------------------------------------}
+ioEditorAPI :: TextEditorAPI Reference Text IO
+ioEditorAPI = TextEditorAPI {
+  load = \fp -> do
+      initialStorage <- unsafeMMapVector fp Nothing
+      pure $ mkIoEditor initialStorage
+  }

@@ -20,7 +20,7 @@ import Text.Editor.Editable
 data PosType = Logical | Physical
 
 -- | A position identified by the X and Y coords.
-newtype Pos (ty :: PosType) = Pos Int deriving (Show, Enum)
+newtype Pos (ty :: PosType) = Pos Int deriving (Show, Enum, Num)
 
 type family InternalStorage (backend :: *) :: *
 
