@@ -1,3 +1,4 @@
+{-# LANGUAGE MultiWayIf #-}
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE RankNTypes #-}
@@ -69,6 +70,9 @@ splitPiece pos piece@Piece{..}
                         )
   | otherwise = error "splitPiece called on an invalid range."
 
+isNull :: Piece -> Bool
+isNull Piece{..} = startPos >= endPos
+
 insertPiece :: Pos 'Logical -> Piece -> [Piece] -> [Piece]
 insertPiece logicalPos p pcs = go (Pos 0) pcs []
   where
@@ -76,10 +80,38 @@ insertPiece logicalPos p pcs = go (Pos 0) pcs []
     go lPos [] !acc = reverse (p : acc)
     go lPos (x:xs) acc =
         let lPos' = lPos + (Pos $ pieceLength x)
-         in if lPos' >= logicalPos
-            then case splitPiece (coerce $ logicalPos - lPos) x of
-                   (before, after) -> before : p : after : (xs <> acc)
-            else go lPos' xs (x : acc)
+        in if lPos' >= logicalPos
+           then case splitPiece (coerce $ logicalPos - lPos) x of
+                  (before, after) -> before : p : after : (xs <> acc)
+           else go lPos' xs (x : acc)
+
+deletePiece :: Range 'Logical -> [Piece] -> [Piece]
+deletePiece logicalRange pcs = go (Pos 0) pcs []
+  where
+    go :: Pos 'Logical -> [Piece] -> [Piece] -> [Piece]
+    go lPos [] !acc = reverse acc
+    go lPos (x:xs) acc =
+        let lPos' = lPos + (Pos $ pieceLength x)
+            pPos  = coerce $ (rStart logicalRange - lPos)
+        in if lPos' >= rStart logicalRange
+           then case splitPiece pPos x of
+                  (before, after) -> 
+                    let after' = 
+                          after { 
+                            startPos = pPos + Pos (rangeLength logicalRange)
+                          }
+                      -- Modify after to ignore the deleted range.
+                      -- If doing so would make the piece \"overflow\",
+                      -- we discard it altogether.
+                     in if | isNull before && not (isNull after') -> after' : (xs <> acc)
+                           | isNull after' ->
+                               let newRange = logicalRange {
+                                              rStart = rStart logicalRange + Pos (pieceLength after)
+                                            }
+                               in if | isNull before -> deletePiece newRange (reverse $ before : (xs <> acc))
+                                     | True          -> deletePiece newRange (reverse $ xs <> acc)
+                           | True          -> before : after' : (xs <> acc)
+           else go lPos' xs (x : acc)
 
 type instance InternalStorage (PieceTable str) = Storage str
 
@@ -106,10 +138,9 @@ mkPureEditor self storage = TextEditor
     , _insert      = \pos c   -> pure $ self (insertImpl storage pos c)
     , _insertLine  = \pos str -> pure $ self (insertLineImpl storage pos str)
     , _delete      = \pos     -> pure $ self (deleteImpl storage pos)
-    , _deleteRange = \(Range s e) ->
-        pure $ self (foldr (\_ acc -> deleteImpl acc s) storage [s..e])
-    , _itemAt     = \(Pos ix) -> pure $ undefined
-    , _itemsAt    = undefined
+    , _deleteRange = \range   -> pure $ self (deleteRangeImpl storage range)
+    , _itemAt      = \(Pos ix) -> pure $ undefined
+    , _itemsAt     = undefined
     }
 
 insertImpl :: Storage str
@@ -125,7 +156,6 @@ insertImpl s@MkStorage{..} insertionPoint rune =
     bufLen     = Editable.length $ addBuffer
     newPiece   = Piece AddBuffer (Pos bufLen) (Pos $ bufLen + 1)
     pieces'    = insertPiece insertionPoint newPiece pieces
-
 
 insertLineImpl :: Storage str
                -> Pos 'Logical
@@ -145,7 +175,14 @@ insertLineImpl s@MkStorage{..} insertionPoint line =
 deleteImpl :: Storage str
            -> Pos 'Logical
            -> Storage str
-deleteImpl s (Pos ix) = undefined
+deleteImpl s deletionPoint =
+  deleteRangeImpl s (Range deletionPoint (deletionPoint + 1))
+
+deleteRangeImpl :: Storage str
+                -> Range 'Logical
+                -> Storage str
+deleteRangeImpl s@MkStorage{..} deleteRange = 
+  s { pieces = deletePiece deleteRange pieces }
 
 {-----------------------------------------------------------------------------
   Utility functions

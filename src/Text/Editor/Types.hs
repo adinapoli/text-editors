@@ -10,6 +10,7 @@ module Text.Editor.Types where
 import GHC.TypeLits
 import Control.Monad
 import Data.Word
+import Data.Coerce
 import Data.Function ((&))
 import Data.String
 import Data.ByteString (ByteString)
@@ -35,6 +36,9 @@ data Range (ty :: PosType) =
     Range { rStart :: Pos ty
           , rEnd   :: Pos ty
           } deriving Show
+
+rangeLength :: Range ty -> Int
+rangeLength r = coerce (rEnd r - rStart r)
 
 -- | A 'TextEditor' generic interface implemented as a record
 -- of functions.
