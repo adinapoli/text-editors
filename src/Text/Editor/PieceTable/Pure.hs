@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -14,6 +15,10 @@ module Text.Editor.PieceTable.Pure (
     , pureStrEditor
     -- * Debug utility functions
     , debugDumpStorage
+    -- * Internals
+    , splitPiece
+    , Piece(..)
+    , Source(..)
     ) where
 
 import Text.Editor.Types
@@ -46,9 +51,35 @@ data Piece = Piece {
   , endPos   :: Pos 'Physical
   } deriving Show
 
+pieceLength :: Piece -> Int
+pieceLength Piece{..} = coerce (endPos - startPos)
+
 -- | Builds a new 'Piece' out of an input 'Editable' string.
 pieceFromStr :: Editable str => str -> Source -> Piece
 pieceFromStr str s = Piece s (Pos 0) (Pos $ Editable.length str)
+
+-- | Returns 'True' if the input 'Pos' falls within the input 'Piece'.
+inRange :: Pos 'Physical -> Piece -> Bool
+inRange pos Piece{..} = startPos <= pos && pos <= endPos
+
+splitPiece :: Pos 'Physical -> Piece -> (Piece, Piece)
+splitPiece pos piece@Piece{..}
+  | inRange pos piece = ( Piece source startPos pos
+                        , Piece source pos endPos
+                        )
+  | otherwise = error "splitPiece called on an invalid range."
+
+insertPiece :: Pos 'Logical -> Piece -> [Piece] -> [Piece]
+insertPiece logicalPos p pcs = go (Pos 0) pcs []
+  where
+    go :: Pos 'Logical -> [Piece] -> [Piece] -> [Piece]
+    go lPos [] !acc = reverse (p : acc)
+    go lPos (x:xs) acc =
+        let lPos' = lPos + (Pos $ pieceLength x)
+         in if lPos' >= logicalPos
+            then case splitPiece (coerce $ logicalPos - lPos) x of
+                   (before, after) -> before : p : after : (xs <> acc)
+            else go lPos' xs (x : acc)
 
 type instance InternalStorage (PieceTable str) = Storage str
 
@@ -85,27 +116,31 @@ insertImpl :: Storage str
            -> Pos 'Logical
            -> Rune str 
            -> Storage str
-insertImpl s (Pos ix) rune = case s of
-  MkStorage{..} -> s { 
-      addBuffer = addBuffer <> Editable.singleton rune 
-    , pieces    = pieces    <> newPiece
+insertImpl s@MkStorage{..} insertionPoint rune =
+  s { addBuffer = addBuffer'
+    , pieces    = pieces'
     }
   where
-    newPiece = undefined
+    addBuffer' = addBuffer <> Editable.singleton rune
+    bufLen     = Editable.length $ addBuffer
+    newPiece   = Piece AddBuffer (Pos bufLen) (Pos $ bufLen + 1)
+    pieces'    = insertPiece insertionPoint newPiece pieces
+
 
 insertLineImpl :: Storage str
                -> Pos 'Logical
                -> str 
                -> Storage str
-insertLineImpl s@MkStorage{..} (Pos ix) line =
-  s { 
-      addBuffer = addBuffer <> line 
-    , pieces    = pieces    <> [newPiece]
+insertLineImpl s@MkStorage{..} insertionPoint line =
+  s { addBuffer = addBuffer'
+    , pieces    = pieces'
     }
   where
-    newPiece = case pieces of
-                 [] -> pieceFromStr line AddBuffer
-                 _  -> undefined
+    addBuffer' = addBuffer <> line
+    bufLen     = Editable.length $ addBuffer
+    newPiece   = Piece AddBuffer (Pos bufLen) 
+                                 (Pos $ bufLen + Editable.length line)
+    pieces'    = insertPiece insertionPoint newPiece pieces
 
 deleteImpl :: Storage str
            -> Pos 'Logical
@@ -130,7 +165,7 @@ debugDumpStorage ts = case _storage ts of
                       AddBuffer -> addBuffer
               txt = tgt & Editable.drop (coerce startPos)
                         & Editable.take (coerce $ endPos - startPos)
-              in acc <> txt
+              in txt <> acc
 
 
 emptyStorage :: Editable str => Storage str
