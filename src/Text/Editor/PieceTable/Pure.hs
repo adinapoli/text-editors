@@ -27,6 +27,7 @@ import Text.Editor.Editable as E
 
 import Control.Monad.Identity
 
+import Data.List (foldl')
 import Data.Function
 import Data.Coerce
 import Data.Map.Strict (Map)
@@ -36,6 +37,8 @@ import qualified Data.Map.Strict as M
 import qualified Text.Editor.Editable as Editable
 import Data.Text (Text)
 import Data.ByteString (ByteString)
+
+import Debug.Trace
 
 -- A type tag.
 data PieceTable str
@@ -63,12 +66,17 @@ pieceFromStr str s = Piece s (Pos 0) (Pos $ Editable.length str)
 inRange :: Pos 'Physical -> Piece -> Bool
 inRange pos Piece{..} = startPos <= pos && pos <= endPos
 
-splitPiece :: Pos 'Physical -> Piece -> (Piece, Piece)
+data SplitResult =
+    Before Piece
+  | After Piece
+  | InBetween Piece Piece
+
+splitPiece :: Pos 'Physical -> Piece -> SplitResult
 splitPiece pos piece@Piece{..}
-  | inRange pos piece = ( Piece source startPos pos
-                        , Piece source pos endPos
-                        )
-  | otherwise = error "splitPiece called on an invalid range."
+  | inRange pos piece = InBetween (Piece source startPos pos)
+                                  (Piece source pos endPos)
+  | pos <= startPos = Before piece
+  | otherwise       = After  piece
 
 isNull :: Piece -> Bool
 isNull Piece{..} = startPos >= endPos
@@ -80,9 +88,11 @@ insertPiece logicalPos p pcs = go (Pos 0) pcs []
     go lPos [] !acc = reverse (p : acc)
     go lPos (x:xs) acc =
         let lPos' = lPos + (Pos $ pieceLength x)
-        in if lPos' >= logicalPos
+        in if lPos' > logicalPos
            then case splitPiece (coerce $ logicalPos - lPos) x of
-                  (before, after) -> before : p : after : (xs <> acc)
+                  After  this -> p : this : (xs <> acc)
+                  Before this -> this : p : (xs <> acc)
+                  InBetween before after -> before : p : after : (xs <> acc)
            else go lPos' xs (x : acc)
 
 deletePiece :: Range 'Logical -> [Piece] -> [Piece]
@@ -93,12 +103,11 @@ deletePiece logicalRange pcs = go (Pos 0) pcs []
     go lPos (x:xs) acc =
         let lPos' = lPos + (Pos $ pieceLength x)
             pPos  = coerce $ (rStart logicalRange - lPos)
-        in if lPos' >= rStart logicalRange
+        in if lPos' > rStart logicalRange
            then case splitPiece pPos x of
-                  (before, after) -> 
-                    let after' = 
-                          after { 
-                            startPos = pPos + Pos (rangeLength logicalRange)
+                  InBetween before after -> 
+                    let after' = after { 
+                            startPos = startPos after + Pos (rangeLength logicalRange)
                           }
                       -- Modify after to ignore the deleted range.
                       -- If doing so would make the piece \"overflow\",
@@ -111,6 +120,7 @@ deletePiece logicalRange pcs = go (Pos 0) pcs []
                                in if | isNull before -> deletePiece newRange (reverse $ before : (xs <> acc))
                                      | True          -> deletePiece newRange (reverse $ xs <> acc)
                            | True          -> before : after' : (xs <> acc)
+                  _ -> error "Todo"
            else go lPos' xs (x : acc)
 
 type instance InternalStorage (PieceTable str) = Storage str
@@ -192,9 +202,9 @@ deleteRangeImpl s@MkStorage{..} deleteRange =
 -- the content using the 'Piece's.
 debugDumpStorage :: Editor str -> str
 debugDumpStorage ts = case _storage ts of
-  MkStorage{..} -> foldr f mempty pieces
+  MkStorage{..} -> foldl' f mempty pieces
   where
-    f Piece{..} acc = 
+    f acc Piece{..} = 
       case _storage ts of
         MkStorage{..} ->
           let tgt = case source of
@@ -202,7 +212,7 @@ debugDumpStorage ts = case _storage ts of
                       AddBuffer -> addBuffer
               txt = tgt & Editable.drop (coerce startPos)
                         & Editable.take (coerce $ endPos - startPos)
-              in txt <> acc
+              in acc <> txt
 
 
 emptyStorage :: Editable str => Storage str

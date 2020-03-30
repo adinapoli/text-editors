@@ -51,7 +51,9 @@ data TextEditorAPI backend str (m :: * -> *) = TextEditorAPI
 
 data Range (ty :: PosType) = 
     Range { rStart :: Pos ty
+          -- ^ The /inclusive/ start of the 'Range'.
           , rEnd   :: Pos ty
+          -- ^ The /exclusive/ end of the 'Range'.
           } deriving Show
 
 rangeLength :: Range ty -> Int

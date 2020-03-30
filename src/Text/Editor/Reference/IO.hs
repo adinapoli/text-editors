@@ -1,3 +1,4 @@
+{-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
@@ -6,6 +7,7 @@
 module Text.Editor.Reference.IO (
       Reference
     , ioEditorAPI
+    , ioEditor
 
     -- * Debug utility functions
     , debugDumpStorage
@@ -15,6 +17,7 @@ import Text.Editor.Types
 import Text.Editor.Editable as E
 
 import Control.Monad.Identity
+import Control.Monad.Primitive
 
 import Data.Map.Strict (Map)
 import Data.String
@@ -24,13 +27,13 @@ import qualified Data.Text as T
 import Data.Text (Text)
 
 import Data.Vector.Storable.MMap
+import Data.Vector.Storable.Mutable (IOVector)
 import qualified Data.Vector.Storable as V
-import Data.Vector.Storable (Vector)
 
 -- A type tag.
 data Reference
 
-type instance InternalStorage Reference = Vector Char
+type instance InternalStorage Reference = IOVector Char
 
 -- | A purely-functional editor that uses open recursion to propagate the
 -- changes to the internal storage.
@@ -77,17 +80,22 @@ deleteImpl (MkStorage s) (Pos ix) =
 ------------------------------------------------------------------------------}
 
 -- | Retrieves the /entire/ content of the internal storage.
-debugDumpStorage :: TextEditor Reference Text IO -> Text
-debugDumpStorage e = T.pack $ V.toList (_storage e)
+debugDumpStorage :: TextEditor Reference Text IO -> IO Text
+debugDumpStorage e = T.pack . V.toList <$> (V.freeze $ _storage e)
 
 {-----------------------------------------------------------------------------
   Concrete Implementations
 ------------------------------------------------------------------------------}
 
-------------------------------------------------------------------------------}
+-- | Creates a new IO editor with a default 1024 elements buffer.
+ioEditor :: IO (TextEditor Reference Text IO)
+ioEditor = do
+  initialStorage <- V.unsafeThaw (V.generate 1024 (const '0'))
+  pure $ mkIoEditor initialStorage
+
 ioEditorAPI :: TextEditorAPI Reference Text IO
 ioEditorAPI = TextEditorAPI {
   load = \fp -> do
-      initialStorage <- unsafeMMapVector fp Nothing
-      pure $ mkIoEditor initialStorage
+    initialStorage <- unsafeMMapMVector fp ReadWriteEx Nothing
+    pure $ mkIoEditor initialStorage
   }
