@@ -19,6 +19,7 @@ import Text.Editor.Editable as E
 import Control.Monad.Identity
 
 import Data.Map.Strict (Map)
+import Data.Maybe
 import Data.String
 import qualified Data.Map.Strict as M
 
@@ -55,7 +56,10 @@ mkPureEditor self storage = TextEditor
           MkStorage s -> case Editable.splitAt ix s of
                            (_, "") -> Nothing 
                            (_, xs) -> Just (Editable.head xs)
-    , _itemsAt    = undefined
+    , _itemsAt    = \(Range start end) -> pure $ 
+        case sequence $ map (runIdentity . _itemAt (self storage)) [start .. end] of
+          Nothing -> mempty
+          Just xs -> Editable.pack xs
     }
 
 insertImpl :: Storage  str

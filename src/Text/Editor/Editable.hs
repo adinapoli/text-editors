@@ -13,19 +13,21 @@ import qualified Data.ByteString as B
 class (IsString str, Eq str, Monoid str) => Editable str where
   type family Rune str :: *
 
+  pack      :: [Rune str] -> str
   singleton :: Rune str -> str
-  head    :: str -> Rune str
-  tail    :: str -> str
-  splitAt :: Int -> str -> (str, str)
-  zip     :: str -> str -> [(Rune str, Rune str)]
-  find    :: (Rune str -> Bool) -> str -> Maybe (Rune str)
-  length  :: str -> Int
-  drop    :: Int -> str -> str
-  take    :: Int -> str -> str
+  head      :: str -> Rune str
+  tail      :: str -> str
+  splitAt   :: Int -> str -> (str, str)
+  zip       :: str -> str -> [(Rune str, Rune str)]
+  find      :: (Rune str -> Bool) -> str -> Maybe (Rune str)
+  length    :: str -> Int
+  drop      :: Int -> str -> str
+  take      :: Int -> str -> str
 
 instance Editable String where
   type instance Rune String = Char
 
+  pack      = id
   singleton = (:[])
   head = L.head
   tail = L.tail
@@ -39,6 +41,7 @@ instance Editable String where
 instance Editable T.Text where
   type instance Rune T.Text = Char
 
+  pack      = T.pack
   singleton = T.singleton
   head = T.head
   tail = T.tail
@@ -52,6 +55,7 @@ instance Editable T.Text where
 instance Editable B.ByteString where
   type instance Rune B.ByteString = Word8
 
+  pack      = B.pack
   singleton = B.singleton
   head = B.head
   tail = B.tail
