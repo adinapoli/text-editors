@@ -53,4 +53,5 @@ test-suite text-editors-tests
                , tasty
                , tasty-hunit
                , tasty-quickcheck
+               , mtl
   default-language: Haskell2010

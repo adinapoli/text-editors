@@ -5,7 +5,24 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeFamilies #-}
 
-module Text.Editor.Types where
+module Text.Editor.Types (
+    -- * Types
+      PosType(..)
+    , Pos(..)
+    , Range(..)
+    , InternalStorage
+    , TextEditorAPI(..)
+    , TextEditor(..)
+    -- * Main API
+    , insert
+    , insertLine
+    , delete
+    , deleteRange
+    , itemAt
+    , itemsAt
+    -- * Internals
+    , rangeLength
+    ) where
 
 import GHC.TypeLits
 import Control.Monad
@@ -79,6 +96,11 @@ itemAt :: Pos 'Logical
        -> TextEditor backend str m 
        -> m (Maybe (Rune str))
 itemAt pos old = _itemAt old pos
+
+itemsAt :: Range 'Logical
+        -> TextEditor backend str m 
+        -> m str
+itemsAt r old = _itemsAt old r
 
 exampleUserSession :: Monad m 
                    => TextEditorAPI backend String m 

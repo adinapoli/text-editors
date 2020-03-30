@@ -10,5 +10,5 @@ main = defaultMain tests
 
 tests :: TestTree
 tests = testGroup "Tests"
-  [ testGroup "Reference Editor tests" testEditorTests
+  [ testEditorTests
   ]
