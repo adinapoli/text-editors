@@ -29,7 +29,8 @@ library
                        mtl,
                        vector,
                        vector-mmap,
-                       primitive
+                       primitive,
+                       list-zipper >= 0.0.9
   hs-source-dirs:      src
   default-language:    Haskell2010
 

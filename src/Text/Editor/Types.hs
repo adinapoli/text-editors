@@ -38,7 +38,8 @@ import Text.Editor.Editable
 data PosType = Logical | Physical
 
 -- | A position identified by the X and Y coords.
-newtype Pos (ty :: PosType) = Pos Int deriving (Show, Eq, Ord, Enum, Num)
+newtype Pos (ty :: PosType) = Pos { getPos :: Int } 
+    deriving (Show, Eq, Ord, Enum, Num)
 
 type family InternalStorage (backend :: *) :: *
 
@@ -53,7 +54,7 @@ data Range (ty :: PosType) =
     Range { rStart :: Pos ty
           -- ^ The /inclusive/ start of the 'Range'.
           , rEnd   :: Pos ty
-          -- ^ The /exclusive/ end of the 'Range'.
+          -- ^ The /inclusive/ end of the 'Range'.
           } deriving Show
 
 rangeLength :: Range ty -> Int

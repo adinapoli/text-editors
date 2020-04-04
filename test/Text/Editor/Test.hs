@@ -32,15 +32,17 @@ testEditorTests :: forall backend str m. (
                 -> TestTree
 testEditorTests lbl Proxy Proxy Proxy checkStorage checkResult = 
     testGroup lbl [ 
-      testCase "basic insert rune" (basicInsertRuneTest checkStorage)
-    , testCase "basic insert runes" (basicInsertRunesTest checkStorage)
-    , testCase "basic insert line" (basicInsertLineTest checkStorage)
-    , testCase "basic delete rune beginning" (basicDeleteRuneBeginningTest checkStorage)
-    , testCase "basic delete rune middle" (basicDeleteRuneMiddleTest checkStorage)
-    , testCase "basic delete rune end" (basicDeleteRuneEndTest checkStorage)
-    , testCase "basic delete line beginning" (basicDeleteLineBeginningTest checkStorage)
-    , testCase "basic delete line middle" (basicDeleteLineMiddleTest checkStorage)
-    , testCase "basic delete line end" (basicDeleteLineEndTest checkStorage)
+        testCase "basic insert rune trivial" (basicInsertRuneTrivialTest checkStorage)
+      , testCase "basic insert rune" (basicInsertRuneTest checkStorage)
+      , testCase "basic insert runes" (basicInsertRunesTest checkStorage)
+      , testCase "basic insert line" (basicInsertLineTest checkStorage)
+      , testCase "basic insert complex" (basicInsertComplexTest checkStorage)
+    --, testCase "basic delete rune beginning" (basicDeleteRuneBeginningTest checkStorage)
+    --, testCase "basic delete rune middle" (basicDeleteRuneMiddleTest checkStorage)
+    --, testCase "basic delete rune end" (basicDeleteRuneEndTest checkStorage)
+    --, testCase "basic delete line beginning" (basicDeleteLineBeginningTest checkStorage)
+    --, testCase "basic delete line middle" (basicDeleteLineMiddleTest checkStorage)
+    --, testCase "basic delete line end" (basicDeleteLineEndTest checkStorage)
     --, testCase "basic itemAt rune exists" (basicItemAtRuneExistsTest checkResult)
     --, testCase "basic itemAt rune doesn't exists" (basicItemAtRuneDoesntExistsTest checkResult)
     --, testCase "basic itemsAt line exists" (basicItemsAtLineExistsTest checkResult)
@@ -78,6 +80,15 @@ checkApi editorM nt fromEditor expectedM ops = do
  The actual tests
 ------------------------------------------------------------------------------}
 
+basicInsertRuneTrivialTest :: (Editable str, Rune str ~ Char)
+                           => CheckStorage backend str m 
+                           -> Assertion
+basicInsertRuneTrivialTest checkStorage = do
+  checkStorage (fromString "ab") [
+      insert (Pos 0) 'a'
+    , insert (Pos 1) 'b'
+    ]
+
 basicInsertRuneTest :: (Editable str, Rune str ~ Char)
                     => CheckStorage backend str m 
                     -> Assertion
@@ -108,6 +119,16 @@ basicInsertLineTest checkStorage =
       insertLine (Pos 0)  "hello "
     , insertLine (Pos 6)  "basic "
     , insertLine (Pos 12) "world"
+    ]
+
+basicInsertComplexTest :: IsString str
+                       => CheckStorage backend str m 
+                       -> Assertion
+basicInsertComplexTest checkStorage =
+  checkStorage "the quick fox\nJumped over\nThe lazy dog!" [ 
+      insertLine (Pos 0)  "the quick fox\nThe lazy dog!"
+    , insertLine (Pos 14) "Jumped "
+    , insertLine (Pos 21) "over\n"
     ]
 
 {------------------------------------------------------------------------------
@@ -147,7 +168,7 @@ basicDeleteLineBeginningTest :: IsString str
 basicDeleteLineBeginningTest checkStorage =
   checkStorage "basic world" [ 
       insertLine  (Pos 0)  "hello basic world"
-    , deleteRange (Range (Pos 0) (Pos 6))
+    , deleteRange (Range (Pos 0) (Pos 5))
     ]
 
 basicDeleteLineMiddleTest :: IsString str 
@@ -156,7 +177,7 @@ basicDeleteLineMiddleTest :: IsString str
 basicDeleteLineMiddleTest checkStorage =
   checkStorage "hello world" [ 
       insertLine  (Pos 0)  "hello basic world"
-    , deleteRange (Range (Pos 6) (Pos 12))
+    , deleteRange (Range (Pos 5) (Pos 10))
     ]
 
 basicDeleteLineEndTest :: IsString str 

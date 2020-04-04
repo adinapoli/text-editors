@@ -14,7 +14,7 @@ main = defaultMain tests
 
 tests :: TestTree
 tests = testGroup "Tests"
-  [ --Reference.Pure.tests
+  [ Reference.Pure.tests
   -- , Reference.IO.tests
-  PieceTable.Pure.tests
+  , PieceTable.Pure.tests
   ]

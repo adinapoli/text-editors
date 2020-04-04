@@ -17,7 +17,10 @@ module Text.Editor.PieceTable.Pure (
     -- * Debug utility functions
     , debugDumpStorage
     -- * Internals
+    , pieceFromStr
+    , inRange
     , splitPiece
+    , insertPiece
     , Piece(..)
     , Source(..)
     ) where
@@ -33,6 +36,9 @@ import Data.Coerce
 import Data.Map.Strict (Map)
 import Data.String
 import qualified Data.Map.Strict as M
+import Control.Monad.State.Strict
+import qualified Data.ListZipper as Z
+import Data.Maybe (fromMaybe)
 
 import qualified Text.Editor.Editable as Editable
 import Data.Text (Text)
@@ -50,9 +56,12 @@ data Source =
 
 -- | A 'Piece'.
 data Piece = Piece {
-    source :: Source
-  , startPos :: Pos 'Physical
-  , endPos   :: Pos 'Physical
+    source       :: Source
+  , startPos     :: Pos 'Physical
+  , endPos       :: Pos 'Physical
+  , rootDistance :: Pos 'Logical
+  -- ^ The \"distance\" (expressed as a /logical/ position) from the
+  -- root of the document.
   } deriving Show
 
 pieceLength :: Piece -> Int
@@ -60,68 +69,103 @@ pieceLength Piece{..} = coerce (endPos - startPos)
 
 -- | Builds a new 'Piece' out of an input 'Editable' string.
 pieceFromStr :: Editable str => str -> Source -> Piece
-pieceFromStr str s = Piece s (Pos 0) (Pos $ Editable.length str)
+pieceFromStr str s = 
+    Piece s (Pos 0) (Pos $ Editable.length str) (Pos 0)
 
 -- | Returns 'True' if the input 'Pos' falls within the input 'Piece'.
-inRange :: Pos 'Physical -> Piece -> Bool
-inRange pos Piece{..} = startPos <= pos && pos <= endPos
+inRange :: Pos 'Logical -> Piece -> Bool
+inRange pos p = pos >= rootDistance p && 
+                pos <= rootDistance p + (Pos $ pieceLength p)
 
 data SplitResult =
-    Before Piece
+    InBetween Piece Piece
+  | Before Piece
   | After Piece
-  | InBetween Piece Piece
+  deriving Show
 
-splitPiece :: Pos 'Physical -> Piece -> SplitResult
+splitPiece :: Pos 'Logical -> Piece -> SplitResult
 splitPiece pos piece@Piece{..}
-  | inRange pos piece = InBetween (Piece source startPos pos)
-                                  (Piece source pos endPos)
-  | pos <= startPos = Before piece
-  | otherwise       = After  piece
+  | pieceLength piece == 1 = Before piece
+  | pos == rootDistance    = After piece
+  | otherwise =
+      let slack = pos - rootDistance
+          left  = Piece source startPos (startPos + coerce slack) rootDistance
+          right = Piece source (startPos + coerce slack) endPos rootDistance
+      in InBetween left right
+  where
+    slack :: Pos 'Physical
+    slack = coerce (pos - rootDistance)
 
 isNull :: Piece -> Bool
 isNull Piece{..} = startPos >= endPos
 
 insertPiece :: Pos 'Logical -> Piece -> [Piece] -> [Piece]
-insertPiece logicalPos p pcs = go (Pos 0) pcs []
+insertPiece logicalPos newPiece pcs = maybe (pcs <> [newPiece]) id $ do
+  z  <- Z.zipper pcs
+  z' <- Z.runListZipperOp (Z.moveRightUntil (inRange logicalPos)) $ z
+  case z' of
+    (Z.ListZipper left focus right, ()) -> do
+      pure $ case splitPiece logicalPos focus of
+        Before sibling ->
+          left <> [newPiece] <> map increaseDistance (sibling : right)
+        After sibling ->
+          left <> [sibling,newPiece] <> map increaseDistance right
+        InBetween this that ->
+          left <> [that, newPiece] <> map increaseDistance (this : right)
   where
-    go :: Pos 'Logical -> [Piece] -> [Piece] -> [Piece]
-    go lPos [] !acc = reverse (p : acc)
-    go lPos (x:xs) acc =
-        let lPos' = lPos + (Pos $ pieceLength x)
-        in if lPos' > logicalPos
-           then case splitPiece (coerce $ logicalPos - lPos) x of
-                  After  this -> p : this : (xs <> acc)
-                  Before this -> this : p : (xs <> acc)
-                  InBetween before after -> before : p : after : (xs <> acc)
-           else go lPos' xs (x : acc)
+    increaseDistance :: Piece -> Piece
+    increaseDistance = increaseRootDistance (pieceLength newPiece)
+
+increaseRootDistance :: Int -> Piece -> Piece
+increaseRootDistance distance p = 
+  p { rootDistance = rootDistance p + Pos distance }
+
+--insertPiece :: Pos 'Logical -> Piece -> [Piece] -> [Piece]
+--insertPiece logicalPos p pcs = 
+--  go (Pos 0) pcs []
+--  where
+--    go :: Pos 'Logical -> [Piece] -> [Piece] -> [Piece]
+--    go lPos [] !acc = reverse (p : acc)
+--    go lPos (x:xs) acc =
+--        let lPos' = lPos + (Pos $ pieceLength x)
+--        in if lPos' > logicalPos
+--           then case splitPiece (coerce $ logicalPos - lPos) x of
+--                  After  this -> p : this : (xs <> acc)
+--                  Before this -> this : p : (xs <> acc)
+--                  InBetween before after -> before : p : after : (xs <> acc)
+--           else go lPos' xs (x : acc)
+--
 
 deletePiece :: Range 'Logical -> [Piece] -> [Piece]
-deletePiece logicalRange pcs = go (Pos 0) pcs []
-  where
-    go :: Pos 'Logical -> [Piece] -> [Piece] -> [Piece]
-    go lPos [] !acc = reverse acc
-    go lPos (x:xs) acc =
-        let lPos' = lPos + (Pos $ pieceLength x)
-            pPos  = coerce $ (rStart logicalRange - lPos)
-        in if lPos' > rStart logicalRange
-           then case splitPiece pPos x of
-                  InBetween before after -> 
-                    let after' = after { 
-                            startPos = startPos after + Pos (rangeLength logicalRange)
-                          }
-                      -- Modify after to ignore the deleted range.
-                      -- If doing so would make the piece \"overflow\",
-                      -- we discard it altogether.
-                     in if | isNull before && not (isNull after') -> after' : (xs <> acc)
-                           | isNull after' ->
-                               let newRange = logicalRange {
-                                              rStart = rStart logicalRange + Pos (pieceLength after)
-                                            }
-                               in if | isNull before -> deletePiece newRange (reverse $ before : (xs <> acc))
-                                     | True          -> deletePiece newRange (reverse $ xs <> acc)
-                           | True          -> before : after' : (xs <> acc)
-                  _ -> error "Todo"
-           else go lPos' xs (x : acc)
+deletePiece = undefined
+
+--deletePiece :: Range 'Logical -> [Piece] -> [Piece]
+--deletePiece logicalRange pcs = go (Pos 0) pcs []
+--  where
+--    go :: Pos 'Logical -> [Piece] -> [Piece] -> [Piece]
+--    go lPos [] !acc = reverse acc
+--    go lPos (x:xs) acc =
+--        let lPos' = lPos + (Pos $ pieceLength x)
+--            pPos  = coerce $ (rStart logicalRange - lPos)
+--        in if lPos' > rStart logicalRange
+--           then case splitPiece pPos x of
+--                  InBetween before after -> 
+--                    let after' = after { 
+--                            startPos = startPos after + Pos (rangeLength logicalRange)
+--                          }
+--                      -- Modify after to ignore the deleted range.
+--                      -- If doing so would make the piece \"overflow\",
+--                      -- we discard it altogether.
+--                     in if | isNull before && not (isNull after') -> after' : (xs <> acc)
+--                           | isNull after' ->
+--                               let newRange = logicalRange {
+--                                              rStart = rStart logicalRange + Pos (pieceLength after)
+--                                            }
+--                               in if | isNull before -> deletePiece newRange (reverse $ before : (xs <> acc))
+--                                     | True          -> deletePiece newRange (reverse $ xs <> acc)
+--                           | True          -> before : after' : (xs <> acc)
+--                  _ -> error "Todo"
+--           else go lPos' xs (x : acc)
 
 type instance InternalStorage (PieceTable str) = Storage str
 
@@ -164,7 +208,7 @@ insertImpl s@MkStorage{..} insertionPoint rune =
   where
     addBuffer' = addBuffer <> Editable.singleton rune
     bufLen     = Editable.length $ addBuffer
-    newPiece   = Piece AddBuffer (Pos bufLen) (Pos $ bufLen + 1)
+    newPiece   = Piece AddBuffer (Pos bufLen) (Pos $ bufLen + 1) insertionPoint
     pieces'    = insertPiece insertionPoint newPiece pieces
 
 insertLineImpl :: Storage str
@@ -180,6 +224,7 @@ insertLineImpl s@MkStorage{..} insertionPoint line =
     bufLen     = Editable.length $ addBuffer
     newPiece   = Piece AddBuffer (Pos bufLen) 
                                  (Pos $ bufLen + Editable.length line)
+                                 insertionPoint
     pieces'    = insertPiece insertionPoint newPiece pieces
 
 deleteImpl :: Storage str
@@ -200,11 +245,11 @@ deleteRangeImpl s@MkStorage{..} deleteRange =
 
 -- | Retrieves the /entire/ content of the internal storage by reconstructing
 -- the content using the 'Piece's.
-debugDumpStorage :: Editor str -> str
+debugDumpStorage :: Show str => Editor str -> str
 debugDumpStorage ts = case _storage ts of
-  MkStorage{..} -> foldl' f mempty pieces
+  MkStorage{..} -> foldr f mempty pieces
   where
-    f acc Piece{..} = 
+    f Piece{..} acc = 
       case _storage ts of
         MkStorage{..} ->
           let tgt = case source of
