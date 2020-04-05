@@ -32,22 +32,22 @@ testEditorTests :: forall backend str m. (
                 -> TestTree
 testEditorTests lbl Proxy Proxy Proxy checkStorage checkResult = 
     testGroup lbl [ 
-        testCase "basic insert rune trivial" (basicInsertRuneTrivialTest checkStorage)
-      , testCase "basic insert rune" (basicInsertRuneTest checkStorage)
-      , testCase "basic insert runes" (basicInsertRunesTest checkStorage)
-      , testCase "basic insert line" (basicInsertLineTest checkStorage)
-      , testCase "basic insert complex" (basicInsertComplexTest checkStorage)
-    --, testCase "basic delete rune beginning" (basicDeleteRuneBeginningTest checkStorage)
-    --, testCase "basic delete rune middle" (basicDeleteRuneMiddleTest checkStorage)
-    --, testCase "basic delete rune end" (basicDeleteRuneEndTest checkStorage)
-    --, testCase "basic delete line beginning" (basicDeleteLineBeginningTest checkStorage)
-    --, testCase "basic delete line middle" (basicDeleteLineMiddleTest checkStorage)
-    --, testCase "basic delete line end" (basicDeleteLineEndTest checkStorage)
-    --, testCase "basic itemAt rune exists" (basicItemAtRuneExistsTest checkResult)
-    --, testCase "basic itemAt rune doesn't exists" (basicItemAtRuneDoesntExistsTest checkResult)
-    --, testCase "basic itemsAt line exists" (basicItemsAtLineExistsTest checkResult)
-    --, testCase "basic itemsAt line doesn't exists" (basicItemsAtLineDoesntExistsTest checkResult)
-    ]
+    --   testCase "basic insert rune trivial" (basicInsertRuneTrivialTest checkStorage)
+    -- , testCase "basic insert rune" (basicInsertRuneTest checkStorage)
+    -- , testCase "basic insert runes" (basicInsertRunesTest checkStorage)
+    -- , testCase "basic insert line" (basicInsertLineTest checkStorage)
+    -- , testCase "basic insert complex" (basicInsertComplexTest checkStorage)
+    -- , testCase "basic delete rune beginning" (basicDeleteRuneBeginningTest checkStorage)
+         testCase "basic delete rune middle" (basicDeleteRuneMiddleTest checkStorage)
+       , testCase "basic delete rune end" (basicDeleteRuneEndTest checkStorage)
+       , testCase "basic delete line beginning" (basicDeleteLineBeginningTest checkStorage)
+       , testCase "basic delete line middle" (basicDeleteLineMiddleTest checkStorage)
+       , testCase "basic delete line end" (basicDeleteLineEndTest checkStorage)
+    -- , testCase "basic itemAt rune exists" (basicItemAtRuneExistsTest checkResult)
+    -- , testCase "basic itemAt rune doesn't exists" (basicItemAtRuneDoesntExistsTest checkResult)
+    -- , testCase "basic itemsAt line exists" (basicItemsAtLineExistsTest checkResult)
+    -- , testCase "basic itemsAt line doesn't exists" (basicItemsAtLineDoesntExistsTest checkResult)
+      ]
 
 type CheckStorage backend str m
   =  str 

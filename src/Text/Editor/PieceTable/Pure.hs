@@ -64,13 +64,21 @@ data Piece = Piece {
   -- root of the document.
   } deriving Show
 
-pieceLength :: Piece -> Int
-pieceLength Piece{..} = coerce (endPos - startPos)
-
 -- | Builds a new 'Piece' out of an input 'Editable' string.
 pieceFromStr :: Editable str => str -> Source -> Piece
 pieceFromStr str s = 
     Piece s (Pos 0) (Pos $ Editable.length str) (Pos 0)
+
+pieceLength :: Piece -> Int
+pieceLength Piece{..} = coerce (endPos - startPos)
+
+increaseRootDistance :: Int -> Piece -> Piece
+increaseRootDistance distance p = 
+  p { rootDistance = rootDistance p + Pos distance }
+
+decreaseRootDistance :: Int -> Piece -> Piece
+decreaseRootDistance distance p = 
+  p { rootDistance = rootDistance p - Pos distance }
 
 -- | Returns 'True' if the input 'Pos' falls within the input 'Piece'.
 inRange :: Pos 'Logical -> Piece -> Bool
@@ -116,9 +124,9 @@ insertPiece logicalPos newPiece pcs = maybe (pcs <> [newPiece]) id $ do
     increaseDistance :: Piece -> Piece
     increaseDistance = increaseRootDistance (pieceLength newPiece)
 
-increaseRootDistance :: Int -> Piece -> Piece
-increaseRootDistance distance p = 
-  p { rootDistance = rootDistance p + Pos distance }
+--
+-- Old version of 'insertPiece'
+--
 
 --insertPiece :: Pos 'Logical -> Piece -> [Piece] -> [Piece]
 --insertPiece logicalPos p pcs = 
@@ -137,7 +145,42 @@ increaseRootDistance distance p =
 --
 
 deletePiece :: Range 'Logical -> [Piece] -> [Piece]
-deletePiece = undefined
+deletePiece deleteRange@Range{..} pcs = maybe pcs id $ do
+  z  <- Z.zipper pcs
+  z' <- flip Z.runListZipperOp z $ do
+          Z.moveRightUntil (inRange rStart)
+          Z.opUntil Z.deleteStepRight (inRange rEnd)
+  case z' of
+    (Z.ListZipper left focus right, ()) -> do
+      -- Here we have to handle the case where the deletion happens
+      -- within the same piece or between pieces.
+      if | inRange rStart focus -> traceShow "same piece" $
+          pure $ case splitPiece rStart focus of
+            Before sibling ->
+              left <> map decreaseDistance (sibling : right)
+            After sibling ->
+              left <> [amend sibling] <> map decreaseDistance right
+            InBetween this that ->
+              left <> map decreaseDistance (amend that : this : right)
+         | otherwise -> traceShow "at boundary" $
+          pure $ case splitPiece rEnd focus of
+            Before sibling ->
+              left <> map decreaseDistance (sibling : right)
+            After sibling ->
+              left <> [sibling] <> map decreaseDistance right
+            InBetween this that ->
+              left <> map decreaseDistance (this : right)
+  where
+    decreaseDistance :: Piece -> Piece
+    decreaseDistance = decreaseRootDistance (rangeLength deleteRange)
+
+    amend :: Piece -> Piece
+    amend p = p { startPos = startPos p + Pos (rangeLength deleteRange) + 1}
+
+
+--
+-- Old version of 'deletePiece'
+--
 
 --deletePiece :: Range 'Logical -> [Piece] -> [Piece]
 --deletePiece logicalRange pcs = go (Pos 0) pcs []
