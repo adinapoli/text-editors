@@ -17,7 +17,6 @@ import Text.Editor.Types
 import Text.Editor.Editable as E
 
 import Control.Monad.Identity
-import Control.Monad.Primitive
 
 import Data.Map.Strict (Map)
 import Data.String
