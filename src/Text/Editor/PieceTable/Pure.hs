@@ -17,17 +17,11 @@ module Text.Editor.PieceTable.Pure (
     , pureStrEditor
     -- * Debug utility functions
     , debugDumpStorage
-    -- * Internals
-    , pieceFromStr
-    , inRange
-    , splitPiece
-    , insertPiece
-    , Piece(..)
-    , Source(..)
     ) where
 
 import Text.Editor.Types
 import Text.Editor.Editable as E
+import Text.Editor.PieceTable.Types
 
 import Control.Monad.Identity
 
@@ -49,64 +43,6 @@ import Debug.Trace
 
 -- A type tag.
 data PieceTable str
-
-data Source =
-    Original
-  | AddBuffer
-  deriving Show
-
--- | A 'Piece'.
-data Piece = Piece {
-    source       :: Source
-  , startPos     :: Pos 'Physical
-  , endPos       :: Pos 'Physical
-  , rootDistance :: Pos 'Logical
-  -- ^ The \"distance\" (expressed as a /logical/ position) from the
-  -- root of the document.
-  } deriving Show
-
--- | Builds a new 'Piece' out of an input 'Editable' string.
-pieceFromStr :: Editable str => str -> Source -> Piece
-pieceFromStr str s = 
-    Piece s (Pos 0) (Pos $ Editable.length str) (Pos 0)
-
-pieceLength :: Piece -> Int
-pieceLength Piece{..} = coerce (endPos - startPos)
-
-increaseRootDistance :: Int -> Piece -> Piece
-increaseRootDistance distance p = 
-  p { rootDistance = rootDistance p + Pos distance }
-
-decreaseRootDistance :: Int -> Piece -> Piece
-decreaseRootDistance distance p = 
-  p { rootDistance = rootDistance p - Pos distance }
-
--- | Returns 'True' if the input 'Pos' falls within the input 'Piece'.
-inRange :: Pos 'Logical -> Piece -> Bool
-inRange pos p = pos >= rootDistance p && 
-                pos <= rootDistance p + (Pos $ pieceLength p)
-
-data SplitResult =
-    InBetween Piece Piece
-  | Before Piece
-  | After Piece
-  deriving Show
-
-splitPiece :: Pos 'Logical -> Piece -> SplitResult
-splitPiece pos piece@Piece{..}
-  | pieceLength piece == 1 = Before piece
-  | pos == rootDistance    = After piece
-  | otherwise =
-      let slack = pos - rootDistance
-          left  = Piece source startPos (startPos + coerce slack) rootDistance
-          right = Piece source (startPos + coerce slack) endPos rootDistance
-      in InBetween left right
-  where
-    slack :: Pos 'Physical
-    slack = coerce (pos - rootDistance)
-
-isNull :: Piece -> Bool
-isNull Piece{..} = startPos >= endPos
 
 insertPiece :: Pos 'Logical -> Piece -> [Piece] -> [Piece]
 insertPiece logicalPos newPiece pcs = maybe (pcs <> [newPiece]) id $ do

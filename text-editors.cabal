@@ -20,13 +20,16 @@ library
   exposed-modules:     Text.Editor.Types
                        Text.Editor.Reference.Pure
                        Text.Editor.Reference.IO
+                       Text.Editor.PieceTable.Types
                        Text.Editor.PieceTable.Pure
+                       Text.Editor.PieceTable.IO
                        Text.Editor.Editable
   build-depends:       base >=4.12.0.0 && < 5,
                        bytestring,
                        text,
                        containers,
                        mtl,
+                       mmap,
                        vector,
                        vector-mmap,
                        list-zipper >= 0.0.9
