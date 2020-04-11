@@ -43,10 +43,10 @@ testEditorTests lbl Proxy Proxy Proxy checkStorage checkResult =
       , testCase "basic delete line beginning" (basicDeleteLineBeginningTest checkStorage)
       , testCase "basic delete line middle" (basicDeleteLineMiddleTest checkStorage)
       , testCase "basic delete line end" (basicDeleteLineEndTest checkStorage)
-    -- , testCase "basic itemAt rune exists" (basicItemAtRuneExistsTest checkResult)
-    -- , testCase "basic itemAt rune doesn't exists" (basicItemAtRuneDoesntExistsTest checkResult)
-    -- , testCase "basic itemsAt line exists" (basicItemsAtLineExistsTest checkResult)
-    -- , testCase "basic itemsAt line doesn't exists" (basicItemsAtLineDoesntExistsTest checkResult)
+      , testCase "basic itemAt rune exists" (basicItemAtRuneExistsTest checkResult)
+      , testCase "basic itemAt rune doesn't exists" (basicItemAtRuneDoesntExistsTest checkResult)
+      , testCase "basic itemsAt line exists" (basicItemsAtLineExistsTest checkResult)
+      , testCase "basic itemsAt line doesn't exists" (basicItemsAtLineDoesntExistsTest checkResult)
       ]
 
 type CheckStorage backend str m
@@ -197,7 +197,9 @@ basicItemAtRuneExistsTest :: ( Monad m
                           => CheckResult backend str m 
                           -> Assertion
 basicItemAtRuneExistsTest checkResult =
-  checkResult (pure $ Just 'l') (itemAt (Pos 3)) [ insertLine (Pos 0) "hello" ]
+  checkResult (pure $ Just 'l') (itemAt (Pos 3)) [ 
+    insertLine (Pos 0) "hello" 
+    ]
 
 basicItemAtRuneDoesntExistsTest :: ( Monad m
                                    , Editable str

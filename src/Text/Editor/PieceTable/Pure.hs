@@ -2,6 +2,7 @@
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
@@ -175,11 +176,7 @@ deletePiece deleteRange@Range{..} pcs = maybe pcs id $ do
     decreaseDistance = decreaseRootDistance (rangeLength deleteRange)
 
     amend :: Piece -> Piece
-    amend p 
-      | rangeLength deleteRange == 1 = 
-          p { startPos = startPos p + Pos (rangeLength deleteRange) }
-      | otherwise = 
-          p { startPos = startPos p + Pos (rangeLength deleteRange) + 1}
+    amend p = p { startPos = startPos p + Pos (rangeLength deleteRange) }
 
 
 --
@@ -240,8 +237,8 @@ mkPureEditor self storage = TextEditor
     , _insertLine  = \pos str -> pure $ self (insertLineImpl storage pos str)
     , _delete      = \pos     -> pure $ self (deleteImpl storage pos)
     , _deleteRange = \range   -> pure $ self (deleteRangeImpl storage range)
-    , _itemAt      = \(Pos ix) -> pure $ undefined
-    , _itemsAt     = undefined
+    , _itemAt      = \pos     -> pure $ itemAtImpl storage pos
+    , _itemsAt     = \range   -> pure $ itemsAtImpl storage range
     }
 
 insertImpl :: Storage str
@@ -278,7 +275,7 @@ deleteImpl :: Storage str
            -> Pos 'Logical
            -> Storage str
 deleteImpl s deletionPoint =
-  deleteRangeImpl s (Range deletionPoint (deletionPoint + 1))
+  deleteRangeImpl s (Range deletionPoint deletionPoint)
 
 deleteRangeImpl :: Storage str
                 -> Range 'Logical
@@ -287,24 +284,64 @@ deleteRangeImpl s@MkStorage{..} deleteRange =
   s { pieces = deletePiece deleteRange pieces }
 
 {-----------------------------------------------------------------------------
+  Lookup
+------------------------------------------------------------------------------}
+
+itemAtImpl :: Storage str
+           -> Pos 'Logical
+           -> Maybe (Rune str)
+itemAtImpl s@MkStorage{..} lookupPoint = do
+  let res = itemsAtImpl s (Range lookupPoint lookupPoint)
+  guard (Editable.length res >= 1)
+  pure $ Editable.head res
+
+itemsAtImpl :: forall str. Storage str
+            -> Range 'Logical
+            -> str
+itemsAtImpl storage@MkStorage{..} r@Range{..} = fromMaybe mempty $ do
+    z <- Z.zipper pieces
+    (start, ()) <- Z.runListZipperOp (Z.moveRightUntil (inRange rStart)) z
+    case start of
+      Z.ListZipper _ focus rs -> 
+        let focus' = case splitPiece rStart focus of 
+              Before x -> x
+              After  x -> x
+              InBetween _ x -> x
+            in pure $ go mempty (rangeLength r) focus' rs
+  where
+    go :: str -> Int -> Piece -> [Piece] -> str
+    go !acc !toRead p ps
+      | toRead <= pieceLength p =
+          let txt = Editable.take toRead (pieceToStr storage p)
+          in acc <> txt    
+      | otherwise =
+          let txt = Editable.take toRead (pieceToStr storage p)
+          in case ps of
+               [] -> mempty -- not enough bytes
+               (x:xs) -> go (acc <> txt) (toRead - (pieceLength p)) x xs
+
+{-----------------------------------------------------------------------------
   Utility functions
 ------------------------------------------------------------------------------}
 
+-- | Converts a 'Piece' into a 'str'.
+pieceToStr :: Storage str -> Piece -> str
+pieceToStr MkStorage{..} Piece{..} =
+  let tgt = case source of
+              Original  -> originalBuffer
+              AddBuffer -> addBuffer
+      txt = tgt & Editable.drop (coerce startPos)
+                & Editable.take (coerce $ endPos - startPos)
+      in txt
+
 -- | Retrieves the /entire/ content of the internal storage by reconstructing
 -- the content using the 'Piece's.
-debugDumpStorage :: Show str => Editor str -> str
+debugDumpStorage :: Editor str -> str
 debugDumpStorage ts = case _storage ts of
   MkStorage{..} -> foldr f mempty pieces
   where
-    f Piece{..} acc = 
-      case _storage ts of
-        MkStorage{..} ->
-          let tgt = case source of
-                      Original  -> originalBuffer
-                      AddBuffer -> addBuffer
-              txt = tgt & Editable.drop (coerce startPos)
-                        & Editable.take (coerce $ endPos - startPos)
-              in acc <> txt
+    f p acc = 
+      case _storage ts of s@MkStorage{..} -> acc <> pieceToStr s p
 
 
 emptyStorage :: Editable str => Storage str

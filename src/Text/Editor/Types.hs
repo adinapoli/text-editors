@@ -57,8 +57,11 @@ data Range (ty :: PosType) =
           -- ^ The /inclusive/ end of the 'Range'.
           } deriving Show
 
+-- | Returns the length of the range. Being both ends /inclusive/ means
+-- that 'rangeLength (Pos 0) (Pos 0) === 1'.
 rangeLength :: Range ty -> Int
-rangeLength r = coerce (rEnd r - rStart r)
+rangeLength r = 
+    coerce (rEnd r - rStart r) + 1
 
 -- | A 'TextEditor' generic interface implemented as a record
 -- of functions.
