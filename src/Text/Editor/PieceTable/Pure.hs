@@ -154,7 +154,7 @@ deletePiece deleteRange@Range{..} pcs = maybe pcs id $ do
     (Z.ListZipper left focus right, ()) -> do
       -- Here we have to handle the case where the deletion happens
       -- within the same piece or between pieces.
-      if | inRange rStart focus -> traceShow "same piece" $
+      if | inRange rStart focus ->
           pure $ case splitPiece rStart focus of
             Before sibling ->
               left <> map decreaseDistance (sibling : right)
@@ -162,7 +162,7 @@ deletePiece deleteRange@Range{..} pcs = maybe pcs id $ do
               left <> [amend sibling] <> map decreaseDistance right
             InBetween this that ->
               left <> map decreaseDistance (amend that : this : right)
-         | otherwise -> traceShow "at boundary" $
+         | otherwise ->
           pure $ case splitPiece rEnd focus of
             Before sibling ->
               left <> map decreaseDistance (sibling : right)
@@ -175,7 +175,11 @@ deletePiece deleteRange@Range{..} pcs = maybe pcs id $ do
     decreaseDistance = decreaseRootDistance (rangeLength deleteRange)
 
     amend :: Piece -> Piece
-    amend p = p { startPos = startPos p + Pos (rangeLength deleteRange) + 1}
+    amend p 
+      | rangeLength deleteRange == 1 = 
+          p { startPos = startPos p + Pos (rangeLength deleteRange) }
+      | otherwise = 
+          p { startPos = startPos p + Pos (rangeLength deleteRange) + 1}
 
 
 --

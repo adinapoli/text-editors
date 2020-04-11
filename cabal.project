@@ -2,5 +2,5 @@ packages: .
 
 source-repository-package
     type: git
-    location: https://github.com/adinapoli/list-zipper.git
+    location: https://github.com/qfpl/list-zipper.git
     tag: 899a193579d79ef59ae70b83f20982374e1ba638
