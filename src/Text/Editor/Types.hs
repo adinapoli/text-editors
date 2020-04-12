@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE DataKinds #-}
@@ -26,6 +27,7 @@ module Text.Editor.Types (
 
 import GHC.TypeLits
 import Control.Monad
+import Data.Monoid
 import Data.Word
 import Data.Coerce
 import Data.Function ((&))
@@ -40,6 +42,14 @@ data PosType = Logical | Physical
 -- | A position identified by the X and Y coords.
 newtype Pos (ty :: PosType) = Pos { getPos :: Int } 
     deriving (Show, Eq, Ord, Enum, Num)
+
+instance Semigroup (Pos 'Logical) where
+    (<>) (Pos p1) (Pos p2) = Pos (p1 + p2)
+
+instance Monoid (Pos 'Logical) where
+    mappend = (<>)
+    mempty  = Pos 0
+
 
 type family InternalStorage (backend :: *) :: *
 
