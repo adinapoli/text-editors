@@ -130,15 +130,31 @@ itemAtImpl s lookupPoint = do
 itemsAtImpl :: Storage 
             -> Range 'Logical
             -> IO Text
-itemsAtImpl storage@MkStorage{..} r@Range{..} =
-  case searchPiece rStart pieces of
-    Position _ focus rs -> do
-      let focus' = case splitPiece rStart focus of 
-            Before x -> x
-            After  x -> x
-            InBetween _ x -> x
-      go mempty (rangeLength r) focus' rs
+itemsAtImpl storage@MkStorage{..} r@Range{..} = do
+  let searchResult = case searchPiece rStart pieces of
+        Position _ fcs rs -> splitFocus fcs rs
+        OnLeft  -> case viewl pieces of
+          (fcs :< rs) -> splitFocus fcs rs
+          EmptyL -> Nothing
+        OnRight -> case viewr pieces of
+          (_ :> fcs) -> splitFocus fcs mempty
+          EmptyR -> Nothing
+        Nowhere -> Nothing
+
+  case searchResult of
+    Nothing -> pure mempty
+    Just (focus, rs) -> go mempty (rangeLength r) focus rs
+
   where
+ 
+    splitFocus :: Piece 
+               -> FingerTree (Pos 'Logical) Piece
+               -> Maybe (Piece, FingerTree (Pos 'Logical) Piece)
+    splitFocus fcs rs = case splitPiece rStart fcs of 
+      Before x -> Just (x,rs)
+      After  x -> Just (x,rs)
+      InBetween _ x -> Just (x,rs)
+
     go :: Text 
        -> Int 
        -> Piece 
@@ -147,7 +163,7 @@ itemsAtImpl storage@MkStorage{..} r@Range{..} =
     go !acc !toRead p ps
       | toRead <= pieceLength p = do
           txt <- T.take toRead <$> pieceToStr storage p
-          pure $ acc <> txt    
+          pure $ acc <> txt
       | otherwise = do
           txt <- T.take toRead <$> pieceToStr storage p
           case viewl ps of
