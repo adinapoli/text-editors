@@ -132,45 +132,35 @@ itemAtImpl s lookupPoint = do
 itemsAtImpl :: Storage 
             -> Range 'Logical
             -> IO Text
-itemsAtImpl storage@MkStorage{..} r@Range{..} = do
-  let searchResult = case searchPiece rStart pieces of
-        Position _ fcs rs -> splitFocus fcs rs
-        OnLeft  -> case viewl pieces of
-          (fcs :< rs) -> splitFocus fcs rs
-          EmptyL -> Nothing
-        OnRight -> case viewr pieces of
-          (_ :> fcs) -> splitFocus fcs mempty
-          EmptyR -> Nothing
-        Nowhere -> Nothing
+itemsAtImpl storage@MkStorage{..} r@Range{..} =  do
 
-  case searchResult of
-    Nothing -> pure mempty
-    Just (focus, rs) -> go mempty (rangeLength r) focus rs
+  -- General idea: \"chop\" the pieces to include only the range we
+  -- care about, and then read each of them.
+
+  let interestingPieces = 
+        pieces & FT.dropUntil (inRange' rStart)
+               & FT.takeUntil (not . (inRange' rEnd))
+
+  case viewl interestingPieces of
+    EmptyL             -> pure mempty
+    (x :< xs)          -> case splitPiece rStart x of
+      Before _         -> processRest (x <| xs)
+      After  _         -> processRest (x <| xs)
+      InBetween _ that -> processRest (that <| xs)
 
   where
+    processRest :: FingerTree PieceMeasure Piece -> IO Text
+    processRest pcs = case viewr pcs of
+      EmptyR             -> pure mempty
+      (left :> focus)    -> case splitPiece rEnd focus of
+        Before _         -> readRange (left |> focus)
+        After  _         -> readRange (left |> focus)
+        InBetween this _ -> readRange (left |> this)
 
-    splitFocus :: Piece 
-               -> FingerTree PieceMeasure Piece
-               -> Maybe (Piece, FingerTree PieceMeasure Piece)
-    splitFocus fcs rs = case splitPiece rStart fcs of 
-      Before x -> Just (x,rs)
-      After  x -> Just (x,rs)
-      InBetween _ x -> Just (x,rs)
+    readRange :: FingerTree PieceMeasure Piece -> IO Text
+    readRange = 
+      foldlM (\acc p -> (`mappend` acc) <$> pieceToStr storage p) mempty
 
-    go :: Text 
-       -> Int 
-       -> Piece 
-       -> FingerTree PieceMeasure Piece 
-       -> IO Text
-    go !acc !toRead p ps
-      | toRead <= pieceLength p = do
-          txt <- T.take toRead <$> pieceToStr storage p
-          pure $ acc <> txt
-      | otherwise = do
-          txt <- T.take toRead <$> pieceToStr storage p
-          case viewl ps of
-            EmptyL -> pure mempty -- not enough bytes
-            (x :< xs) -> go (acc <> txt) (toRead - (pieceLength p)) x xs
 
 {-----------------------------------------------------------------------------
   Utility functions
@@ -189,9 +179,19 @@ instance Monoid PieceMeasure where
 instance Measured PieceMeasure Piece where
     measure p = PieceMeasure (rootDistance p, pieceLength p)
 
--- | Converts a 'Piece' into a 'Text'.
--- FIXME(adn) This is inefficient as the piece can be huge. It shouldn't
--- really exist.
+-- | Retrieves the /entire/ content of the internal storage by reconstructing
+-- the content using the 'Piece's.
+debugDumpStorage :: Editor -> IO Text
+debugDumpStorage ts = foldlM f mempty (toList $ pieces (_storage ts))
+  where
+    f :: Text -> Piece -> IO Text
+    f acc p = do
+      txt <- pieceToStr (_storage ts) p
+      pure $ acc <> txt
+
+-- | Reads an /entire/ 'Piece', loading its content into memory. This
+-- function needs to be used with care, as it might be very inefficient
+-- code if called on big pieces.
 pieceToStr :: Storage -> Piece -> IO Text
 pieceToStr MkStorage{..} p@Piece{..} = do
   case source of
@@ -200,15 +200,6 @@ pieceToStr MkStorage{..} p@Piece{..} = do
         pure $ TE.decodeUtf8 bs
     AddBuffer -> pure $ addBuffer & T.drop (coerce startPos)
                                   & T.take (coerce $ endPos - startPos)
-
--- | Retrieves the /entire/ content of the internal storage by reconstructing
--- the content using the 'Piece's.
-debugDumpStorage :: Editor -> IO Text
-debugDumpStorage ts = foldlM f mempty (toList $ pieces (_storage ts))
-  where
-    f acc p = do
-      txt <- pieceToStr (_storage ts) p
-      pure $ acc <> txt
 
 insertPiece :: Pos 'Logical 
             -> Piece 
@@ -249,10 +240,11 @@ insertPiece logicalPos newPiece pcs =
 searchPiece :: Pos 'Logical 
             -> FingerTree PieceMeasure Piece 
             -> SearchResult PieceMeasure Piece
-searchPiece pos = FT.search (\m1 _ -> inRange' m1)
-  where
-    inRange' :: PieceMeasure -> Bool
-    inRange' (PieceMeasure (rd, pl)) = pos >= rd && pos <= rd + Pos pl
+searchPiece pos = FT.search (\m1 _ -> inRange' pos m1)
+
+-- | A version of 'inRange' that works over a 'PieceMeasure'.
+inRange' :: Pos 'Logical -> PieceMeasure -> Bool
+inRange' pos (PieceMeasure (rd, pl)) = pos >= rd && pos <= rd + Pos pl
 
 deletePiece :: Range 'Logical 
             -> FingerTree PieceMeasure Piece 
