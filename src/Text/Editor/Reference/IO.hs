@@ -94,7 +94,7 @@ ioEditor = do
 
 ioEditorAPI :: TextEditorAPI Reference Text IO
 ioEditorAPI = TextEditorAPI {
-  load = \fp -> do
+  _load = \fp -> do
     initialStorage <- unsafeMMapMVector fp ReadWriteEx Nothing
     pure $ mkIoEditor initialStorage
   }

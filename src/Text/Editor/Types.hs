@@ -15,6 +15,8 @@ module Text.Editor.Types (
     , TextEditorAPI(..)
     , TextEditor(..)
     -- * Main API
+    , load
+    , save
     , insert
     , insertLine
     , delete
@@ -54,11 +56,20 @@ instance Monoid (Pos 'Logical) where
 type family InternalStorage (backend :: *) :: *
 
 data TextEditorAPI backend str (m :: * -> *) = TextEditorAPI
-  { load :: FilePath -> m (TextEditor backend str m)
+  { _load :: FilePath -> m (TextEditor backend str m)
   -- ^ Load the content of a file and /produces/ a 'TextEditor'.
-  , save :: FilePath -> TextEditor backend str m -> m ()
+  , _save :: FilePath -> TextEditor backend str m -> m ()
   -- ^ Save the content of a 'TextEditor'.
   }
+
+load :: FilePath -> TextEditorAPI backend str m -> m (TextEditor backend str m)
+load fp api = _load api $ fp
+
+save :: FilePath 
+     -> TextEditor    backend str m 
+     -> TextEditorAPI backend str m 
+     -> m ()
+save fp ed api = (_save api) fp ed
 
 data Range (ty :: PosType) = 
     Range { rStart :: Pos ty
@@ -122,7 +133,7 @@ exampleUserSession :: Monad m
                    => TextEditorAPI backend String m 
                    -> m ()
 exampleUserSession api = do
-  edtr <- load api "text.txt"
+  edtr <- load "text.txt" api
 
   edtr' <-     insertLine (Pos 0) "foo"
            >=> insertLine (Pos 0) "bar"
@@ -130,7 +141,7 @@ exampleUserSession api = do
            >=> delete     (Pos 1)
            $ edtr
 
-  save api "text.txt" edtr'
+  save "text.txt" edtr' api
 
 {- A monadic API would feel natural: 
 

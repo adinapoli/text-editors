@@ -15,6 +15,8 @@
 module Text.Editor.PieceTable.IO (
       PieceTable
     , ioEditorAPI
+    -- * Debug utility functions
+    , debugDumpStorage
     ) where
 
 import Text.Editor.Types
@@ -29,6 +31,7 @@ import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
 import Data.FingerTree as FT
 import Data.List (foldl')
+import Data.Foldable (toList)
 import Data.Function
 import Data.Coerce
 import Data.String
@@ -41,7 +44,9 @@ import Data.Maybe (fromMaybe)
 
 import Data.Text (Text)
 import Data.ByteString (ByteString)
+import qualified Data.Text.IO as TIO
 
+import System.IO
 import System.IO.MMap as MMap
 
 -- A type tag.
@@ -168,6 +173,15 @@ pieceToStr MkStorage{..} p@Piece{..} = do
     AddBuffer -> pure $ addBuffer & T.drop (coerce startPos)
                                   & T.take (coerce $ endPos - startPos)
 
+-- | Retrieves the /entire/ content of the internal storage by reconstructing
+-- the content using the 'Piece's.
+debugDumpStorage :: Editor -> IO Text
+debugDumpStorage ts = foldM f mempty (toList $ pieces (_storage ts))
+  where
+    f acc p = do
+      txt <- pieceToStr (_storage ts) p
+      pure $ acc <> txt
+
 insertPiece :: Pos 'Logical 
             -> Piece 
             -> FingerTree (Pos 'Logical) Piece 
@@ -243,17 +257,21 @@ deletePiece deleteRange@Range{..} pcs =
 
 ioEditorAPI :: TextEditorAPI PieceTable Text IO
 ioEditorAPI = TextEditorAPI {
-  load = \fp -> do
-    bracket (acquire fp) dispose $ \(ptr, rs, offset, sz) -> do
-      let initialStorage = MkStorage {
-            originalBufferPtr     = ptr
-          , originalBufferRawSize = rs
-          , originalBufferOffset  = offset
-          , originalBufferSize    = sz
-          , addBuffer             = mempty
-          , pieces                = mempty
-          }
-      pure $ fix mkIoEditor initialStorage
+    _load = \fp -> do
+      bracket (acquire fp) dispose $ \(ptr, rs, offset, sz) -> do
+        let initialStorage = MkStorage {
+              originalBufferPtr     = ptr
+            , originalBufferRawSize = rs
+            , originalBufferOffset  = offset
+            , originalBufferSize    = sz
+            , addBuffer             = mempty
+            , pieces                = mempty
+            }
+        pure $ fix mkIoEditor initialStorage
+  , _save = \fp editor -> do
+      writeHdl <- openFile fp WriteMode
+      let pcs = toList . pieces . _storage $ editor
+      mapM_ (writePiece writeHdl (_storage editor)) pcs
   }
   where
     acquire :: FilePath -> IO (Ptr Word8, Int, Int, Int)
@@ -262,3 +280,6 @@ ioEditorAPI = TextEditorAPI {
     dispose :: (Ptr Word8, Int, Int, Int) -> IO ()
     dispose (ptr, rs, _,_) = MMap.munmapFilePtr ptr rs
 
+    writePiece :: Handle -> Storage -> Piece -> IO ()
+    writePiece hdl sto p = 
+      pieceToStr sto p >>= hPutStr hdl . T.unpack
