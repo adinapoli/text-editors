@@ -20,5 +20,5 @@ tests = testGroup "Tests"
   -- , Reference.IO.tests
   , PieceTable.Types.tests
   , PieceTable.Pure.tests
-  --, PieceTable.IO.tests
+  , PieceTable.IO.tests
   ]

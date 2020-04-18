@@ -62,8 +62,8 @@ insertPiece logicalPos newPiece pcs = maybe (pcs <> [newPiece]) id $ do
           reverse left <> [this, newPiece] <> map increaseDistance (that : right)
   where
     increaseDistance :: Piece -> Piece
-    increaseDistance = increaseRootDistance (pieceLength newPiece)
-
+    increaseDistance = -- increaseRootDistance (pieceLength newPiece)
+      increaseRootDistance (getPos (rootDistance newPiece) + pieceLength newPiece)
 --
 -- Old version of 'insertPiece'
 --

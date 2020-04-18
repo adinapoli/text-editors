@@ -31,7 +31,7 @@ import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
 import Data.FingerTree as FT
 import Data.List (foldl')
-import Data.Foldable (toList)
+import Data.Foldable (toList, foldlM)
 import Data.Function
 import Data.Coerce
 import Data.String
@@ -49,6 +49,8 @@ import qualified Data.Text.IO as TIO
 import System.IO
 import System.IO.MMap as MMap
 
+import Debug.Trace
+
 -- A type tag.
 data PieceTable
 
@@ -60,7 +62,7 @@ data Storage = MkStorage {
   , originalBufferOffset  :: !Int
   , originalBufferSize    :: !Int
   , addBuffer             :: Text
-  , pieces                :: FingerTree (Pos 'Logical) Piece
+  , pieces                :: FingerTree PieceMeasure Piece
   } deriving Show
 
 type Editor = TextEditor PieceTable Text IO
@@ -146,10 +148,10 @@ itemsAtImpl storage@MkStorage{..} r@Range{..} = do
     Just (focus, rs) -> go mempty (rangeLength r) focus rs
 
   where
- 
+
     splitFocus :: Piece 
-               -> FingerTree (Pos 'Logical) Piece
-               -> Maybe (Piece, FingerTree (Pos 'Logical) Piece)
+               -> FingerTree PieceMeasure Piece
+               -> Maybe (Piece, FingerTree PieceMeasure Piece)
     splitFocus fcs rs = case splitPiece rStart fcs of 
       Before x -> Just (x,rs)
       After  x -> Just (x,rs)
@@ -158,7 +160,7 @@ itemsAtImpl storage@MkStorage{..} r@Range{..} = do
     go :: Text 
        -> Int 
        -> Piece 
-       -> FingerTree (Pos 'Logical) Piece 
+       -> FingerTree PieceMeasure Piece 
        -> IO Text
     go !acc !toRead p ps
       | toRead <= pieceLength p = do
@@ -174,8 +176,18 @@ itemsAtImpl storage@MkStorage{..} r@Range{..} = do
   Utility functions
 ------------------------------------------------------------------------------}
 
-instance Measured (Pos 'Logical) Piece where
-    measure = rootDistance
+newtype PieceMeasure = PieceMeasure (Pos 'Logical, Int)
+
+instance Semigroup PieceMeasure where
+  PieceMeasure (p1,l1) <> PieceMeasure (p2, l2)
+    = PieceMeasure (p1,l1)
+
+instance Monoid PieceMeasure where
+    mempty  = PieceMeasure (Pos 0, 0)
+    mappend = (<>)
+
+instance Measured PieceMeasure Piece where
+    measure p = PieceMeasure (rootDistance p, pieceLength p)
 
 -- | Converts a 'Piece' into a 'Text'.
 -- FIXME(adn) This is inefficient as the piece can be huge. It shouldn't
@@ -192,7 +204,7 @@ pieceToStr MkStorage{..} p@Piece{..} = do
 -- | Retrieves the /entire/ content of the internal storage by reconstructing
 -- the content using the 'Piece's.
 debugDumpStorage :: Editor -> IO Text
-debugDumpStorage ts = foldM f mempty (toList $ pieces (_storage ts))
+debugDumpStorage ts = foldlM f mempty (toList $ pieces (_storage ts))
   where
     f acc p = do
       txt <- pieceToStr (_storage ts) p
@@ -200,11 +212,11 @@ debugDumpStorage ts = foldM f mempty (toList $ pieces (_storage ts))
 
 insertPiece :: Pos 'Logical 
             -> Piece 
-            -> FingerTree (Pos 'Logical) Piece 
-            -> FingerTree (Pos 'Logical) Piece
+            -> FingerTree PieceMeasure Piece 
+            -> FingerTree PieceMeasure Piece
 insertPiece logicalPos newPiece pcs = 
   case searchPiece logicalPos pcs of
-    Position left focus right ->
+    Position left focus right -> 
       case splitPiece logicalPos focus of
           Before sibling ->
             left <> FT.singleton newPiece 
@@ -213,8 +225,8 @@ insertPiece logicalPos newPiece pcs =
             left <> FT.fromList [sibling,newPiece] 
                  <> FT.fmap' increaseDistance right
           InBetween this that ->
-            left <> FT.fromList [that,newPiece] 
-                 <> FT.fmap' increaseDistance (this <| right)
+            left <> FT.fromList [this,newPiece] 
+                 <> FT.fmap' increaseDistance (that <| right)
     OnLeft -> case viewl pcs of
       EmptyL -> FT.singleton newPiece
       (focus :< right) -> case splitPiece logicalPos focus of
@@ -225,8 +237,8 @@ insertPiece logicalPos newPiece pcs =
              FT.fromList [sibling,newPiece] 
           <> FT.fmap' increaseDistance right
         InBetween this that ->
-             FT.fromList [that,newPiece] 
-          <> FT.fmap' increaseDistance (this <| right)
+             FT.fromList [this,newPiece] 
+          <> FT.fmap' increaseDistance (that <| right)
     OnRight -> case viewr pcs of
       EmptyR -> FT.singleton newPiece
       (left :> focus) -> case splitPiece logicalPos focus of
@@ -238,16 +250,20 @@ insertPiece logicalPos newPiece pcs =
     Nowhere -> pcs
   where
     increaseDistance :: Piece -> Piece
-    increaseDistance = increaseRootDistance (pieceLength newPiece)
+    increaseDistance = 
+      increaseRootDistance (getPos (rootDistance newPiece) + pieceLength newPiece)
 
 searchPiece :: Pos 'Logical 
-            -> FingerTree (Pos 'Logical) Piece 
-            -> SearchResult (Pos 'Logical) Piece
-searchPiece pos = FT.search (\r1 r2 -> r1 <= pos && r2 > pos)
+            -> FingerTree PieceMeasure Piece 
+            -> SearchResult PieceMeasure Piece
+searchPiece pos = FT.search (\m1 _ -> inRange' m1)
+  where
+    inRange' :: PieceMeasure -> Bool
+    inRange' (PieceMeasure (rd, pl)) = pos >= rd && pos <= rd + Pos pl
 
 deletePiece :: Range 'Logical 
-            -> FingerTree (Pos 'Logical) Piece 
-            -> FingerTree (Pos 'Logical) Piece 
+            -> FingerTree PieceMeasure Piece 
+            -> FingerTree PieceMeasure Piece 
 deletePiece deleteRange@Range{..} pcs =
   case searchPiece rStart pcs of
     Position left focus right -> error "todo"
