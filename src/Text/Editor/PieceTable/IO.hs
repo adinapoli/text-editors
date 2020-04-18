@@ -213,10 +213,28 @@ insertPiece logicalPos newPiece pcs =
             left <> FT.fromList [sibling,newPiece] 
                  <> FT.fmap' increaseDistance right
           InBetween this that ->
-            left <> FT.fromList [that, newPiece] 
+            left <> FT.fromList [that,newPiece] 
                  <> FT.fmap' increaseDistance (this <| right)
-    OnLeft  -> newPiece <| pcs
-    OnRight -> pcs |> newPiece
+    OnLeft -> case viewl pcs of
+      EmptyL -> FT.singleton newPiece
+      (focus :< right) -> case splitPiece logicalPos focus of
+        Before sibling ->
+             FT.singleton newPiece 
+          <> FT.fmap' increaseDistance (sibling <| right)
+        After sibling ->
+             FT.fromList [sibling,newPiece] 
+          <> FT.fmap' increaseDistance right
+        InBetween this that ->
+             FT.fromList [that,newPiece] 
+          <> FT.fmap' increaseDistance (this <| right)
+    OnRight -> case viewr pcs of
+      EmptyR -> FT.singleton newPiece
+      (left :> focus) -> case splitPiece logicalPos focus of
+        Before sibling ->
+          left <> FT.singleton newPiece |> (increaseDistance sibling)
+        After sibling -> left <> FT.fromList [sibling,newPiece] 
+        InBetween this that ->
+          left <> FT.fromList [this,newPiece] |> (increaseDistance that)
     Nowhere -> pcs
   where
     increaseDistance :: Piece -> Piece

@@ -9,6 +9,7 @@ import Control.Monad.Identity
 
 import Data.Proxy
 import Data.String
+import Data.Foldable
 
 import Test.Tasty
 import Test.Tasty.HUnit
@@ -71,7 +72,7 @@ checkApi :: (Monad m, Show a, Eq a)
 checkApi editorM nt fromEditor expectedM ops = do
   editor   <- nt editorM 
   expected <- nt expectedM
-  actual <- nt (fromEditor =<< foldM (\acc op -> op acc) editor ops)
+  actual <- nt (fromEditor =<< foldlM (\acc op -> op acc) editor ops)
   let msg =  "checkApi failed: expected = " <> show expected 
           <> ", actual = " <> show actual
   assertEqual "checkApi failed" expected actual

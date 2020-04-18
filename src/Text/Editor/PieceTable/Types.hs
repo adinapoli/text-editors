@@ -3,6 +3,7 @@
 module Text.Editor.PieceTable.Types (
       Piece(..)
     , Source(..)
+    , renderPiece
     , pieceFromStr
     , pieceLength
     , increaseRootDistance
@@ -37,7 +38,7 @@ import Debug.Trace
 data Source =
     Original
   | AddBuffer
-  deriving Show
+  deriving (Eq, Show)
 
 -- | A 'Piece'.
 data Piece = Piece {
@@ -47,7 +48,16 @@ data Piece = Piece {
   , rootDistance :: Pos 'Logical
   -- ^ The \"distance\" (expressed as a /logical/ position) from the
   -- root of the document.
-  } deriving Show
+  } deriving (Eq, Show)
+
+renderPiece :: Piece -> String
+renderPiece p@Piece{..} =
+    let sourceTxt = case source of
+          Original  -> "O"
+          AddBuffer -> "A"
+    in "Piece<" <> sourceTxt <> "," <> show (pieceLength p) <> ">" 
+                <> show (getPos startPos) <> ":" <> show (getPos endPos)
+                <> ":R=" <> show (getPos rootDistance)
 
 -- | Builds a new 'Piece' out of an input 'Editable' string.
 pieceFromStr :: Editable str => str -> Source -> Piece
@@ -68,18 +78,18 @@ decreaseRootDistance distance p =
 -- | Returns 'True' if the input 'Pos' falls within the input 'Piece'.
 inRange :: Pos 'Logical -> Piece -> Bool
 inRange pos p = pos >= rootDistance p && 
-                pos <= rootDistance p + (Pos $ pieceLength p)
+                pos <= rootDistance p + Pos (pieceLength p)
 
 data SplitResult =
     InBetween Piece Piece
   | Before Piece
   | After Piece
-  deriving Show
+  deriving (Eq, Show)
 
 splitPiece :: Pos 'Logical -> Piece -> SplitResult
 splitPiece pos piece@Piece{..}
-  | pieceLength piece == 1 = Before piece
-  | pos == rootDistance    = After piece
+  | pos <=  rootDistance                            = Before piece
+  | pos >= (rootDistance + Pos (pieceLength piece)) = After piece
   | otherwise =
       let slack = pos - rootDistance
           left  = Piece source startPos (startPos + coerce slack) rootDistance

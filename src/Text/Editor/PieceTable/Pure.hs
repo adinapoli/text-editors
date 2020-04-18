@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE MultiWayIf #-}
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE StandaloneDeriving #-}
@@ -48,15 +49,17 @@ insertPiece :: Pos 'Logical -> Piece -> [Piece] -> [Piece]
 insertPiece logicalPos newPiece pcs = maybe (pcs <> [newPiece]) id $ do
   z  <- Z.zipper pcs
   z' <- Z.runListZipperOp (Z.moveRightUntil (inRange logicalPos)) $ z
+  -- We have to (unfortunately) call 'reverse' on the left part of the zipper
+  -- to restore the correct order.
   case z' of
     (Z.ListZipper left focus right, ()) -> do
       pure $ case splitPiece logicalPos focus of
         Before sibling ->
-          left <> [newPiece] <> map increaseDistance (sibling : right)
-        After sibling ->
-          left <> [sibling,newPiece] <> map increaseDistance right
+          reverse left <> [newPiece] <> map increaseDistance (sibling : right)
+        After sibling -> 
+          reverse left <> [sibling,newPiece] <> map increaseDistance right
         InBetween this that ->
-          left <> [that, newPiece] <> map increaseDistance (this : right)
+          reverse left <> [this, newPiece] <> map increaseDistance (that : right)
   where
     increaseDistance :: Piece -> Piece
     increaseDistance = increaseRootDistance (pieceLength newPiece)
@@ -82,7 +85,7 @@ insertPiece logicalPos newPiece pcs = maybe (pcs <> [newPiece]) id $ do
 --
 
 deletePiece :: Range 'Logical -> [Piece] -> [Piece]
-deletePiece deleteRange@Range{..} pcs = maybe pcs id $ do
+deletePiece deleteRange@Range{..} pcs = maybe (traceShow "not found" pcs) id $ do
   z  <- Z.zipper pcs
   z' <- flip Z.runListZipperOp z $ do
           Z.moveRightUntil (inRange rStart)
@@ -91,28 +94,31 @@ deletePiece deleteRange@Range{..} pcs = maybe pcs id $ do
     (Z.ListZipper left focus right, ()) -> do
       -- Here we have to handle the case where the deletion happens
       -- within the same piece or between pieces.
-      if | inRange rStart focus ->
+      if | inRange rStart focus -> do
           pure $ case splitPiece rStart focus of
             Before sibling ->
-              left <> map decreaseDistance (sibling : right)
+              reverse left <> map decreaseDistance (amend sibling : right)
             After sibling ->
-              left <> [amend sibling] <> map decreaseDistance right
+              reverse left <> [amendFromEnd sibling] <> map decreaseDistance right
             InBetween this that ->
-              left <> map decreaseDistance (amend that : this : right)
-         | otherwise ->
+              reverse left <> [this] <> map decreaseDistance (amend that : right)
+         | otherwise -> do
           pure $ case splitPiece rEnd focus of
             Before sibling ->
-              left <> map decreaseDistance (sibling : right)
+              reverse left <> map decreaseDistance (amend sibling : right)
             After sibling ->
-              left <> [sibling] <> map decreaseDistance right
+              reverse left <> [amendFromEnd sibling] <> map decreaseDistance right
             InBetween this that ->
-              left <> map decreaseDistance (this : right)
+              reverse left <> map decreaseDistance (that : right)
   where
     decreaseDistance :: Piece -> Piece
     decreaseDistance = decreaseRootDistance (rangeLength deleteRange)
 
     amend :: Piece -> Piece
     amend p = p { startPos = startPos p + Pos (rangeLength deleteRange) }
+
+    amendFromEnd :: Piece -> Piece
+    amendFromEnd p = p { startPos = endPos p - Pos (rangeLength deleteRange) }
 
 
 --
@@ -150,7 +156,7 @@ deletePiece deleteRange@Range{..} pcs = maybe pcs id $ do
 type instance InternalStorage (PieceTable str) = Storage str
 
 data Storage str where
-  MkStorage :: Editable str => {
+  MkStorage :: (Show (Rune str), Show str, Editable str) => {
       originalBuffer :: str
     , addBuffer      :: str
     , pieces         :: [Piece]
@@ -274,20 +280,17 @@ pieceToStr MkStorage{..} Piece{..} =
 -- the content using the 'Piece's.
 debugDumpStorage :: Editor str -> str
 debugDumpStorage ts = case _storage ts of
-  MkStorage{..} -> foldr f mempty pieces
-  where
-    f p acc = 
-      case _storage ts of s@MkStorage{..} -> acc <> pieceToStr s p
+  s@MkStorage{..} -> mconcat $ map (pieceToStr s) pieces
 
 
-emptyStorage :: Editable str => Storage str
+emptyStorage :: (Show (Rune str), Show str, Editable str) => Storage str
 emptyStorage = MkStorage mempty mempty mempty
 
 {-----------------------------------------------------------------------------
   Concrete Implementations
 ------------------------------------------------------------------------------}
 
-pureEditor :: Editable str => Editor str
+pureEditor :: (Show (Rune str), Show str, Editable str) => Editor str
 pureEditor = fix mkPureEditor emptyStorage
 
 pureTxtEditor :: Editor Text
