@@ -216,7 +216,21 @@ insertPiece :: Pos 'Logical
             -> FingerTree PieceMeasure Piece
 insertPiece logicalPos newPiece pcs = 
   case searchPiece logicalPos pcs of
-    Position left focus right -> 
+    Position left focus right -> insert left focus right
+    OnLeft -> case viewl pcs of
+      EmptyL -> FT.singleton newPiece
+      (focus :< right) -> insert mempty focus right
+    OnRight -> case viewr pcs of
+      EmptyR -> FT.singleton newPiece
+      (left :> focus) -> insert left focus mempty
+    Nowhere -> pcs
+  where
+
+    insert :: FingerTree PieceMeasure Piece
+           -> Piece
+           -> FingerTree PieceMeasure Piece
+           -> FingerTree PieceMeasure Piece
+    insert left focus right =
       case splitPiece logicalPos focus of
           Before sibling ->
             left <> FT.singleton newPiece 
@@ -227,28 +241,7 @@ insertPiece logicalPos newPiece pcs =
           InBetween this that ->
             left <> FT.fromList [this,newPiece] 
                  <> FT.fmap' increaseDistance (that <| right)
-    OnLeft -> case viewl pcs of
-      EmptyL -> FT.singleton newPiece
-      (focus :< right) -> case splitPiece logicalPos focus of
-        Before sibling ->
-             FT.singleton newPiece 
-          <> FT.fmap' increaseDistance (sibling <| right)
-        After sibling ->
-             FT.fromList [sibling,newPiece] 
-          <> FT.fmap' increaseDistance right
-        InBetween this that ->
-             FT.fromList [this,newPiece] 
-          <> FT.fmap' increaseDistance (that <| right)
-    OnRight -> case viewr pcs of
-      EmptyR -> FT.singleton newPiece
-      (left :> focus) -> case splitPiece logicalPos focus of
-        Before sibling ->
-          left <> FT.singleton newPiece |> (increaseDistance sibling)
-        After sibling -> left <> FT.fromList [sibling,newPiece] 
-        InBetween this that ->
-          left <> FT.fromList [this,newPiece] |> (increaseDistance that)
-    Nowhere -> pcs
-  where
+
     increaseDistance :: Piece -> Piece
     increaseDistance = 
       increaseRootDistance (getPos (rootDistance newPiece) + pieceLength newPiece)
@@ -266,40 +259,50 @@ deletePiece :: Range 'Logical
             -> FingerTree PieceMeasure Piece 
 deletePiece deleteRange@Range{..} pcs =
   case searchPiece rStart pcs of
-    Position left focus right -> error "todo"
-    OnLeft  -> error "todo"
-    OnRight -> error "todo"
+    Position left focus right -> delete left focus right
+    OnLeft -> case viewl pcs of
+      EmptyL -> pcs
+      (focus :< right) -> delete mempty focus right
+    OnRight -> case viewr pcs of
+      EmptyR -> pcs
+      (left :> focus) -> delete left focus mempty
     Nowhere -> pcs
---  z  <- Z.zipper pcs
---  z' <- flip Z.runListZipperOp z $ do
---          Z.moveRightUntil (inRange rStart)
---          Z.opUntil Z.deleteStepRight (inRange rEnd)
---  case z' of
---    (Z.ListZipper left focus right, ()) -> do
---      -- Here we have to handle the case where the deletion happens
---      -- within the same piece or between pieces.
---      if | inRange rStart focus ->
---          pure $ case splitPiece rStart focus of
---            Before sibling ->
---              left <> map decreaseDistance (sibling : right)
---            After sibling ->
---              left <> [amend sibling] <> map decreaseDistance right
---            InBetween this that ->
---              left <> map decreaseDistance (amend that : this : right)
---         | otherwise ->
---          pure $ case splitPiece rEnd focus of
---            Before sibling ->
---              left <> map decreaseDistance (sibling : right)
---            After sibling ->
---              left <> [sibling] <> map decreaseDistance right
---            InBetween this that ->
---              left <> map decreaseDistance (this : right)
   where
     decreaseDistance :: Piece -> Piece
     decreaseDistance = decreaseRootDistance (rangeLength deleteRange)
 
     amend :: Piece -> Piece
     amend p = p { startPos = startPos p + Pos (rangeLength deleteRange) }
+
+    amendFromEnd :: Piece -> Piece
+    amendFromEnd p = p { startPos = endPos p - Pos (rangeLength deleteRange) }
+
+    delete :: FingerTree PieceMeasure Piece
+           -> Piece
+           -> FingerTree PieceMeasure Piece
+           -> FingerTree PieceMeasure Piece
+    delete left focus right =
+      -- Here we have to handle the case where the deletion happens
+      -- within the same piece or between pieces.
+      if | inRange rStart focus ->
+          case splitPiece rStart focus of
+            Before sibling ->
+              left <> fmap' decreaseDistance (amend sibling <| right)
+            After sibling ->
+              left <> FT.singleton (amendFromEnd sibling) 
+                   <> fmap' decreaseDistance right
+            InBetween this that ->
+              left <> FT.singleton this 
+                   <> fmap' decreaseDistance (amend that <| right)
+         | otherwise -> do
+          case splitPiece rEnd focus of
+            Before sibling ->
+              left <> fmap' decreaseDistance (amend sibling <| right)
+            After sibling ->
+              left <> FT.singleton (amendFromEnd sibling) 
+                   <> fmap' decreaseDistance right
+            InBetween this that ->
+              left <> fmap' decreaseDistance (that <| right)
 
 {-----------------------------------------------------------------------------
   Concrete Implementations
