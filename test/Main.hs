@@ -19,7 +19,7 @@ tests :: TestTree
 tests = testGroup "Tests"
   [ Reference.Pure.tests
   , Reference.Yi.tests
-  -- , Reference.IO.tests
+  , Reference.IO.tests
   , PieceTable.Types.tests
   , PieceTable.Pure.tests
   , PieceTable.IO.tests

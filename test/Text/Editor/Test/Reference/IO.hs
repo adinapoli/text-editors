@@ -10,22 +10,25 @@ import Data.Text
 import Test.Tasty
 import Test.Tasty.HUnit
 
+import Text.Editor.Reference.Pure
 import Text.Editor.Reference.IO
 import Text.Editor.Types
 import Text.Editor.Test
 
-checkStorage :: CheckStorage Reference Text IO
-checkStorage expected = 
-  checkApi ioEditor id debugDumpStorage (pure expected)
+checkEmptyStorage :: CheckStorage (Reference Text) Text IO
+checkEmptyStorage = \expected actions -> do
+  load "data-files/empty.txt" ioEditorAPI $ \editor ->
+    checkApi (pure editor) id (pure . debugDumpStorage) (pure expected) actions
 
-checkResult :: CheckResult Reference Text IO
-checkResult expected fromEditor = 
-  checkApi ioEditor id fromEditor expected
+checkResult :: CheckResult (Reference Text) Text IO
+checkResult expected fromEditor = \ops -> do
+  load "data-files/empty.txt" ioEditorAPI $ \editor ->
+    checkApi (pure editor) id fromEditor expected ops
 
 tests :: TestTree
 tests = testEditorTests "Reference.IO tests"
-        (Proxy @Reference)
+        (Proxy @(Reference Text))
         (Proxy @Text)
         (Proxy @IO)
-        checkStorage
+        checkEmptyStorage
         checkResult
