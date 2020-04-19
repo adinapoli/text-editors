@@ -234,8 +234,7 @@ itemAtImpl :: Storage str
            -> Maybe (Rune str)
 itemAtImpl s@MkStorage{..} lookupPoint = do
   let res = itemsAtImpl s (Range lookupPoint lookupPoint)
-  guard (Editable.length res >= 1)
-  pure $ Editable.head res
+  Editable.head res
 
 itemsAtImpl :: forall str. Storage str
             -> Range 'Logical

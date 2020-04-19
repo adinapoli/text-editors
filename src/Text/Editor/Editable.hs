@@ -9,17 +9,16 @@ import Data.String
 import qualified Data.List as L
 import qualified Data.Text as T
 import qualified Data.ByteString as B
+import qualified Yi.Rope as Yi
 
 class (IsString str, Eq str, Monoid str) => Editable str where
   type family Rune str :: *
 
   pack      :: [Rune str] -> str
   singleton :: Rune str -> str
-  head      :: str -> Rune str
-  tail      :: str -> str
+  head      :: str -> Maybe (Rune str)
+  tail      :: str -> Maybe str
   splitAt   :: Int -> str -> (str, str)
-  zip       :: str -> str -> [(Rune str, Rune str)]
-  find      :: (Rune str -> Bool) -> str -> Maybe (Rune str)
   length    :: str -> Int
   drop      :: Int -> str -> str
   take      :: Int -> str -> str
@@ -29,39 +28,45 @@ instance Editable String where
 
   pack      = id
   singleton = (:[])
-  head = L.head
-  tail = L.tail
-  zip = L.zip
-  splitAt = L.splitAt
-  find = L.find
-  length = L.length
-  take   = L.take
-  drop   = L.drop
+  head    s = if L.null s then Nothing else Just $ L.head s
+  tail    s = if L.null s then Nothing else Just $ L.tail s
+  splitAt   = L.splitAt
+  length    = L.length
+  take      = L.take
+  drop      = L.drop
 
 instance Editable T.Text where
   type instance Rune T.Text = Char
 
   pack      = T.pack
   singleton = T.singleton
-  head = T.head
-  tail = T.tail
-  zip = T.zip
-  splitAt = T.splitAt
-  find = T.find
-  length = T.length
-  take   = T.take
-  drop   = T.drop
+  head    t = if T.null t then Nothing else Just $ T.head t
+  tail    t = if T.null t then Nothing else Just $ T.tail t
+  splitAt   = T.splitAt
+  length    = T.length
+  take      = T.take
+  drop      = T.drop
 
 instance Editable B.ByteString where
   type instance Rune B.ByteString = Word8
 
   pack      = B.pack
   singleton = B.singleton
-  head = B.head
-  tail = B.tail
-  zip = B.zip
-  splitAt = B.splitAt
-  find = B.find
-  length = B.length
-  take   = B.take
-  drop   = B.drop
+  head    b = if B.null b then Nothing else Just $ B.head b
+  tail    b = if B.null b then Nothing else Just $ B.tail b
+  splitAt   = B.splitAt
+  length    = B.length
+  take      = B.take
+  drop      = B.drop
+
+instance Editable Yi.YiString where
+  type instance Rune Yi.YiString = Char
+
+  pack      = Yi.fromString
+  singleton = Yi.singleton
+  head      = Yi.head
+  tail      = Yi.tail
+  splitAt   = Yi.splitAt
+  length    = Yi.length
+  take      = Yi.take
+  drop      = Yi.drop

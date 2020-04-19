@@ -55,7 +55,7 @@ mkPureEditor self storage = TextEditor
         case storage of
           MkStorage s -> case Editable.splitAt ix s of
                            (_, "") -> Nothing 
-                           (_, xs) -> Just (Editable.head xs)
+                           (_, xs) -> Editable.head xs
     , _itemsAt    = \(Range start end) -> pure $ 
         case sequence $ map (runIdentity . _itemAt (self storage)) [start .. end] of
           Nothing -> mempty
@@ -84,7 +84,8 @@ deleteImpl :: Storage str
 deleteImpl (MkStorage s) (Pos ix) =
   MkStorage $ case Editable.splitAt ix s of
                 (before, "") -> before
-                (before, xs) -> before <> Editable.tail xs
+                (before, xs) -> 
+                    maybe before ((<>) before) (Editable.tail xs)
 
 {-----------------------------------------------------------------------------
   Utility functions
