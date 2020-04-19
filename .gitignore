@@ -1,3 +1,4 @@
 dist-newstyle
 tags**
 .ghc.environment**
+data-files/russian_dict.txt

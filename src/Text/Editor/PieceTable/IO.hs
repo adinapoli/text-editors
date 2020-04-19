@@ -46,8 +46,10 @@ import Data.Text (Text)
 import Data.ByteString (ByteString)
 import qualified Data.Text.IO as TIO
 
+import Foreign.Ptr
 import System.IO
 import System.IO.MMap as MMap
+import System.IO.Posix.MMap.Internal
 
 import Debug.Trace
 
@@ -152,7 +154,7 @@ itemsAtImpl storage@MkStorage{..} r@Range{..} =  do
     processRest :: FingerTree PieceMeasure Piece -> IO Text
     processRest pcs = case viewr pcs of
       EmptyR             -> pure mempty
-      (left :> focus)    -> case splitPiece rEnd focus of
+      (left :> focus)    -> case splitPiece (rEnd - rStart + 1) focus of
         Before _         -> readRange (left |> focus)
         After  _         -> readRange (left |> focus)
         InBetween this _ -> readRange (left |> this)
@@ -195,8 +197,13 @@ debugDumpStorage ts = foldlM f mempty (toList $ pieces (_storage ts))
 pieceToStr :: Storage -> Piece -> IO Text
 pieceToStr MkStorage{..} p@Piece{..} = do
   case source of
+    Original | originalBufferRawSize == 0 -> pure mempty
     Original -> do
-        bs <- BS.unsafePackCStringFinalizer originalBufferPtr (pieceLength p) (pure ())
+        bs <- unsafePackMMapPtr
+                 (originalBufferPtr 
+                   `plusPtr` originalBufferOffset 
+                   `plusPtr` coerce startPos)
+                 (fromIntegral $ pieceLength p) 
         pure $ TE.decodeUtf8 bs
     AddBuffer -> pure $ addBuffer & T.drop (coerce startPos)
                                   & T.take (coerce $ endPos - startPos)
@@ -302,17 +309,19 @@ deletePiece deleteRange@Range{..} pcs =
 
 ioEditorAPI :: TextEditorAPI PieceTable Text IO
 ioEditorAPI = TextEditorAPI {
-    _load = \fp -> do
-      bracket (acquire fp) dispose $ \(ptr, rs, offset, sz) -> do
-        let initialStorage = MkStorage {
-              originalBufferPtr     = ptr
-            , originalBufferRawSize = rs
-            , originalBufferOffset  = offset
-            , originalBufferSize    = sz
-            , addBuffer             = mempty
-            , pieces                = mempty
-            }
-        pure $ fix mkIoEditor initialStorage
+    _load = \fp act -> do
+      (ptr, rs, offset, sz) <- acquire fp
+      let newPiece = Piece Original (Pos 0) (Pos sz) (Pos 0)
+      let initialStorage = MkStorage {
+            originalBufferPtr     = ptr
+          , originalBufferRawSize = rs
+          , originalBufferOffset  = offset
+          , originalBufferSize    = sz
+          , addBuffer             = mempty
+          , pieces                =
+              if sz == 0 then mempty else FT.singleton newPiece
+          }
+      act (fix mkIoEditor initialStorage) `finally` dispose (ptr, rs, offset,sz)
   , _save = \fp editor -> do
       writeHdl <- openFile fp WriteMode
       let pcs = toList . pieces . _storage $ editor

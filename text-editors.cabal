@@ -20,6 +20,7 @@ library
                        Text.Editor.Editable
   build-depends:       base >=4.12.0.0 && < 5,
                        bytestring,
+                       bytestring-mmap,
                        text,
                        containers,
                        mtl,
@@ -32,12 +33,11 @@ library
   hs-source-dirs:      src
   default-language:    Haskell2010
 
-executable text-editors
+executable text-editors-exe
   main-is:             Main.hs
-  -- other-modules:
-  -- other-extensions:
   build-depends:       base >=4.12.0.0 && < 5
-  hs-source-dirs:      src
+                     , text-editors
+  hs-source-dirs:      app
   default-language:    Haskell2010
 
 test-suite text-editors-tests

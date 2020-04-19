@@ -1,3 +1,4 @@
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE GADTs #-}
@@ -52,17 +53,19 @@ instance Monoid (Pos 'Logical) where
     mappend = (<>)
     mempty  = Pos 0
 
-
 type family InternalStorage (backend :: *) :: *
 
 data TextEditorAPI backend str (m :: * -> *) = TextEditorAPI
-  { _load :: FilePath -> m (TextEditor backend str m)
-  -- ^ Load the content of a file and /produces/ a 'TextEditor'.
+  { _load :: FilePath -> (forall r. (TextEditor backend str m -> m r) -> m r)
+  -- ^ Load the content of a file and /produces/ a 'TextEditor' in a
+  -- \"bracketed\" form.
   , _save :: FilePath -> TextEditor backend str m -> m ()
   -- ^ Save the content of a 'TextEditor'.
   }
 
-load :: FilePath -> TextEditorAPI backend str m -> m (TextEditor backend str m)
+load :: FilePath 
+     -> TextEditorAPI backend str m 
+     -> (forall r. (TextEditor backend str m -> m r) -> m r)
 load fp api = _load api $ fp
 
 save :: FilePath 
@@ -81,8 +84,7 @@ data Range (ty :: PosType) =
 -- | Returns the length of the range. Being both ends /inclusive/ means
 -- that 'rangeLength (Pos 0) (Pos 0) === 1'.
 rangeLength :: Range ty -> Int
-rangeLength r = 
-    coerce (rEnd r - rStart r) + 1
+rangeLength r = coerce (rEnd r - rStart r) + 1
 
 -- | A 'TextEditor' generic interface implemented as a record
 -- of functions.
@@ -133,15 +135,14 @@ exampleUserSession :: Monad m
                    => TextEditorAPI backend String m 
                    -> m ()
 exampleUserSession api = do
-  edtr <- load "text.txt" api
+  load "text.txt" api $ \edtr -> do
+    edtr' <-     insertLine (Pos 0) "foo"
+             >=> insertLine (Pos 0) "bar"
+             >=> insert     (Pos 2) 'a'
+             >=> delete     (Pos 1)
+             $ edtr
 
-  edtr' <-     insertLine (Pos 0) "foo"
-           >=> insertLine (Pos 0) "bar"
-           >=> insert     (Pos 2) 'a'
-           >=> delete     (Pos 1)
-           $ edtr
-
-  save "text.txt" edtr' api
+    save "text.txt" edtr' api
 
 {- A monadic API would feel natural: 
 
