@@ -56,7 +56,7 @@ insertPiece logicalPos newPiece pcs = maybe (pcs <> [newPiece]) id $ do
       pure $ case splitPiece logicalPos focus of
         Before sibling ->
           reverse left <> [newPiece] <> map increaseDistance (sibling : right)
-        After sibling -> 
+        After sibling ->
           reverse left <> [sibling,newPiece] <> map increaseDistance right
         InBetween this that ->
           reverse left <> [this, newPiece] <> map increaseDistance (that : right)
@@ -69,7 +69,7 @@ insertPiece logicalPos newPiece pcs = maybe (pcs <> [newPiece]) id $ do
 --
 
 --insertPiece :: Pos 'Logical -> Piece -> [Piece] -> [Piece]
---insertPiece logicalPos p pcs = 
+--insertPiece logicalPos p pcs =
 --  go (Pos 0) pcs []
 --  where
 --    go :: Pos 'Logical -> [Piece] -> [Piece] -> [Piece]
@@ -85,7 +85,7 @@ insertPiece logicalPos newPiece pcs = maybe (pcs <> [newPiece]) id $ do
 --
 
 deletePiece :: Range 'Logical -> [Piece] -> [Piece]
-deletePiece deleteRange@Range{..} pcs = maybe (traceShow "not found" pcs) id $ do
+deletePiece deleteRange@Range{..} pcs = maybe pcs id $ do
   z  <- Z.zipper pcs
   z' <- flip Z.runListZipperOp z $ do
           Z.moveRightUntil (inRange rStart)
@@ -135,8 +135,8 @@ deletePiece deleteRange@Range{..} pcs = maybe (traceShow "not found" pcs) id $ d
 --            pPos  = coerce $ (rStart logicalRange - lPos)
 --        in if lPos' > rStart logicalRange
 --           then case splitPiece pPos x of
---                  InBetween before after -> 
---                    let after' = after { 
+--                  InBetween before after ->
+--                    let after' = after {
 --                            startPos = startPos after + Pos (rangeLength logicalRange)
 --                          }
 --                      -- Modify after to ignore the deleted range.
@@ -169,7 +169,7 @@ type Editor str = TextEditor (PieceTable str) str Identity
 -- | A purely-functional editor that uses open recursion to propagate the
 -- changes to the internal storage.
 -- Approach taken from [this blog post](https://www.well-typed.com/blog/2018/03/oop-in-haskell/)
-mkPureEditor :: Editable str 
+mkPureEditor :: Editable str
              => (Storage str -> Editor str)
              -> Storage str
              -> Editor str
@@ -185,7 +185,7 @@ mkPureEditor self storage = TextEditor
 
 insertImpl :: Storage str
            -> Pos 'Logical
-           -> Rune str 
+           -> Rune str
            -> Storage str
 insertImpl s@MkStorage{..} insertionPoint rune =
   s { addBuffer = addBuffer'
@@ -199,7 +199,7 @@ insertImpl s@MkStorage{..} insertionPoint rune =
 
 insertLineImpl :: Storage str
                -> Pos 'Logical
-               -> str 
+               -> str
                -> Storage str
 insertLineImpl s@MkStorage{..} insertionPoint line =
   s { addBuffer = addBuffer'
@@ -208,7 +208,7 @@ insertLineImpl s@MkStorage{..} insertionPoint line =
   where
     addBuffer' = addBuffer <> line
     bufLen     = Editable.length $ addBuffer
-    newPiece   = Piece AddBuffer (Pos bufLen) 
+    newPiece   = Piece AddBuffer (Pos bufLen)
                                  (Pos $ bufLen + Editable.length line)
                                  insertionPoint
     pieces'    = insertPiece insertionPoint newPiece pieces
@@ -222,7 +222,7 @@ deleteImpl s deletionPoint =
 deleteRangeImpl :: Storage str
                 -> Range 'Logical
                 -> Storage str
-deleteRangeImpl s@MkStorage{..} deleteRange = 
+deleteRangeImpl s@MkStorage{..} deleteRange =
   s { pieces = deletePiece deleteRange pieces }
 
 {-----------------------------------------------------------------------------
@@ -243,8 +243,8 @@ itemsAtImpl storage@MkStorage{..} r@Range{..} = fromMaybe mempty $ do
     z <- Z.zipper pieces
     (start, ()) <- Z.runListZipperOp (Z.moveRightUntil (inRange rStart)) z
     case start of
-      Z.ListZipper _ focus rs -> 
-        let focus' = case splitPiece rStart focus of 
+      Z.ListZipper _ focus rs ->
+        let focus' = case splitPiece rStart focus of
               Before x -> x
               After  x -> x
               InBetween _ x -> x
@@ -254,7 +254,7 @@ itemsAtImpl storage@MkStorage{..} r@Range{..} = fromMaybe mempty $ do
     go !acc !toRead p ps
       | toRead <= pieceLength p =
           let txt = Editable.take toRead (pieceToStr storage p)
-          in acc <> txt    
+          in acc <> txt
       | otherwise =
           let txt = Editable.take toRead (pieceToStr storage p)
           in case ps of

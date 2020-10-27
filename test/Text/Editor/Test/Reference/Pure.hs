@@ -15,14 +15,14 @@ import Text.Editor.Types
 import Text.Editor.Test
 
 checkPureStorage :: CheckStorage (Reference String) String Identity
-checkPureStorage expected = 
-  checkApi (pure pureStrEditor) 
-           (pure . runIdentity) 
-           (pure . debugDumpStorage) 
+checkPureStorage expected =
+  checkApi (pure pureStrEditor)
+           (pure . runIdentity)
+           (pure . debugDumpStorage)
            (pure expected)
 
 checkResult :: CheckResult (Reference String) String Identity
-checkResult expected fromEditor = 
+checkResult expected fromEditor =
   checkApi (pure pureStrEditor) (pure . runIdentity) fromEditor expected
 
 tests :: TestTree

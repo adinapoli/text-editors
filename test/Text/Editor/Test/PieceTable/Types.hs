@@ -42,19 +42,19 @@ inRange_3_prop =
 -- Split at piece boundary, end of piece.
 splitPiece_1_prop :: Property
 splitPiece_1_prop =
-  splitPiece (Pos 10) (Piece Original (Pos 0) (Pos 10) (Pos 0)) === 
+  splitPiece (Pos 10) (Piece Original (Pos 0) (Pos 10) (Pos 0)) ===
       (After (Piece Original (Pos 0) (Pos 10) (Pos 0)))
 
 -- Split at piece boundary, end of piece.
 splitPiece_2_prop :: Property
 splitPiece_2_prop =
-  splitPiece (Pos 0) (Piece Original (Pos 0) (Pos 10) (Pos 0)) === 
+  splitPiece (Pos 0) (Piece Original (Pos 0) (Pos 10) (Pos 0)) ===
       (Before (Piece Original (Pos 0) (Pos 10) (Pos 0)))
 
 -- Split in the middle.
 splitPiece_3_prop :: Property
 splitPiece_3_prop =
-  splitPiece (Pos 5) (Piece Original (Pos 9) (Pos 18) (Pos 0)) === 
+  splitPiece (Pos 5) (Piece Original (Pos 9) (Pos 18) (Pos 0)) ===
       (InBetween (Piece Original (Pos 9) (Pos 14) (Pos 0))
                  (Piece Original (Pos 14) (Pos 18)  (Pos 0))
       )

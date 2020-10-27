@@ -16,14 +16,14 @@ import Text.Editor.Types
 import Text.Editor.Test
 
 checkPureStorage :: CheckStorage (Reference YiString) YiString Identity
-checkPureStorage expected = 
-  checkApi (pure pureEditor) 
-           (pure . runIdentity) 
-           (pure . debugDumpStorage) 
+checkPureStorage expected =
+  checkApi (pure pureEditor)
+           (pure . runIdentity)
+           (pure . debugDumpStorage)
            (pure expected)
 
 checkResult :: CheckResult (Reference YiString) YiString Identity
-checkResult expected fromEditor = 
+checkResult expected fromEditor =
   checkApi (pure pureEditor) (pure . runIdentity) fromEditor expected
 
 tests :: TestTree

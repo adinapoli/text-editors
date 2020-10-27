@@ -48,6 +48,7 @@ test-suite text-editors-tests
                  Text.Editor.Test.Reference.Pure
                  Text.Editor.Test.Reference.IO
                  Text.Editor.Test.Reference.Yi
+                 Text.Editor.Test.PieceTable.Types
                  Text.Editor.Test.PieceTable.Pure
                  Text.Editor.Test.PieceTable.IO
   build-depends: base

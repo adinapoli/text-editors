@@ -1,6 +1,6 @@
 { "languageserver": {
     "haskell": {
-        "command": "ghcide",
+        "command": "haskell-language-server",
         "args": ["--lsp"],
         "rootPatterns": [".stack.yaml", "cabal.config", "package.yaml"],
         "filetypes": ["hs", "lhs", "haskell"],

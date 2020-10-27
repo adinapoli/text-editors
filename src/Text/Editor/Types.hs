@@ -43,7 +43,7 @@ import Text.Editor.Editable
 data PosType = Logical | Physical
 
 -- | A position identified by the X and Y coords.
-newtype Pos (ty :: PosType) = Pos { getPos :: Int } 
+newtype Pos (ty :: PosType) = Pos { getPos :: Int }
     deriving (Show, Eq, Ord, Enum, Num)
 
 instance Semigroup (Pos 'Logical) where
@@ -63,18 +63,18 @@ data TextEditorAPI backend str (m :: * -> *) = TextEditorAPI
   -- ^ Save the content of a 'TextEditor'.
   }
 
-load :: FilePath 
-     -> TextEditorAPI backend str m 
+load :: FilePath
+     -> TextEditorAPI backend str m
      -> (forall r. (TextEditor backend str m -> m r) -> m r)
 load fp api = _load api $ fp
 
-save :: FilePath 
-     -> TextEditor    backend str m 
-     -> TextEditorAPI backend str m 
+save :: FilePath
+     -> TextEditor    backend str m
+     -> TextEditorAPI backend str m
      -> m ()
 save fp ed api = (_save api) fp ed
 
-data Range (ty :: PosType) = 
+data Range (ty :: PosType) =
     Range { rStart :: Pos ty
           -- ^ The /inclusive/ start of the 'Range'.
           , rEnd   :: Pos ty
@@ -101,38 +101,38 @@ data TextEditor backend str (m :: * -> *)
 
 insert :: Pos 'Logical
        -> Rune str
-       -> TextEditor backend str m 
+       -> TextEditor backend str m
        -> m (TextEditor backend str m)
 insert pos rune old = _insert old pos rune
 
 insertLine :: Pos 'Logical
            -> str
-           -> TextEditor backend str m 
+           -> TextEditor backend str m
            -> m (TextEditor backend str m)
 insertLine pos str old = _insertLine old pos str
 
 delete :: Pos 'Logical
-       -> TextEditor backend str m 
+       -> TextEditor backend str m
        -> m (TextEditor backend str m)
 delete pos old = _delete old pos
 
 deleteRange :: Range 'Logical
-            -> TextEditor backend str m 
+            -> TextEditor backend str m
             -> m (TextEditor backend str m)
 deleteRange r old = _deleteRange old r
 
 itemAt :: Pos 'Logical
-       -> TextEditor backend str m 
+       -> TextEditor backend str m
        -> m (Maybe (Rune str))
 itemAt pos old = _itemAt old pos
 
 itemsAt :: Range 'Logical
-        -> TextEditor backend str m 
+        -> TextEditor backend str m
         -> m str
 itemsAt r old = _itemsAt old r
 
-exampleUserSession :: Monad m 
-                   => TextEditorAPI backend String m 
+exampleUserSession :: Monad m
+                   => TextEditorAPI backend String m
                    -> m ()
 exampleUserSession api = do
   load "text.txt" api $ \edtr -> do
@@ -144,9 +144,9 @@ exampleUserSession api = do
 
     save "text.txt" edtr' api
 
-{- A monadic API would feel natural: 
+{- A monadic API would feel natural:
 
-monadicAPI 
+monadicAPI
 monadicAPI = do
   load "text.txt"
   insertLine (Pos 0) "foo"

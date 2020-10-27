@@ -55,29 +55,29 @@ renderPiece p@Piece{..} =
     let sourceTxt = case source of
           Original  -> "O"
           AddBuffer -> "A"
-    in "Piece<" <> sourceTxt <> "," <> show (pieceLength p) <> ">" 
+    in "Piece<" <> sourceTxt <> "," <> show (pieceLength p) <> ">"
                 <> show (getPos startPos) <> ":" <> show (getPos endPos)
                 <> ":R=" <> show (getPos rootDistance)
 
 -- | Builds a new 'Piece' out of an input 'Editable' string.
 pieceFromStr :: Editable str => str -> Source -> Piece
-pieceFromStr str s = 
+pieceFromStr str s =
     Piece s (Pos 0) (Pos $ Editable.length str) (Pos 0)
 
 pieceLength :: Piece -> Int
 pieceLength Piece{..} = coerce (endPos - startPos)
 
 increaseRootDistance :: Int -> Piece -> Piece
-increaseRootDistance distance p = 
+increaseRootDistance distance p =
   p { rootDistance = rootDistance p + Pos distance }
 
 decreaseRootDistance :: Int -> Piece -> Piece
-decreaseRootDistance distance p = 
+decreaseRootDistance distance p =
   p { rootDistance = rootDistance p - Pos distance }
 
 -- | Returns 'True' if the input 'Pos' falls within the input 'Piece'.
 inRange :: Pos 'Logical -> Piece -> Bool
-inRange pos p = pos >= rootDistance p && 
+inRange pos p = pos >= rootDistance p &&
                 pos <= rootDistance p + Pos (pieceLength p)
 
 data SplitResult =
